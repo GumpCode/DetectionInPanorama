@@ -1,0 +1,6 @@
+./examples/detect_for_panorama/images/output-4.jpg
+./examples/detect_for_panorama/images/output-5.jpg
+./examples/detect_for_panorama/images/output-1.jpg
+./examples/detect_for_panorama/images/output-2.jpg
+./examples/detect_for_panorama/images/output-6.jpg
+./examples/detect_for_panorama/images/output-3.jpg
