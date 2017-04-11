@@ -27,10 +27,10 @@ output_file = "{}/examples/detect_for_panorama/images/output.txt".format(caffe_r
 images_dir = "{}/examples/detect_for_panorama/images".format(caffe_root)
 confidence_threshold = 0.6
 
-with open(imglist_file, 'w') as f:
-    images = glob.glob("{}/*.jpg".format(images_dir))
-    for im in images:
-        f.write(im + '\n')
+#with open(imglist_file, 'w') as f:
+#    images = glob.glob("{}/*.jpg".format(images_dir))
+#    for im in images:
+#        f.write(im + '\n')
 
 cmd = "./build/examples/detect_for_panorama/detect4panorama.bin --out_file={} --confidence_threshold={} {} {} {}".format(
         output_file, confidence_threshold, model_file, weight_file, imglist_file)

@@ -236,8 +236,6 @@ DEFINE_string(mean_value, "104,117,123",
     "If specified, can be one value or can be same as image channels"
     " - would subtract from the corresponding channel). Separated by ','."
     "Either mean_file or mean_value should be provided, not both.");
-DEFINE_string(file_type, "image",
-    "The file type in the list_file. Currently support image and video.");
 DEFINE_string(out_file, "",
     "If provided, store the detection results in the out_file.");
 DEFINE_double(confidence_threshold, 0.01,
@@ -266,7 +264,6 @@ int main(int argc, char** argv) {
   const string& weights_file = argv[2];
   const string& mean_file = FLAGS_mean_file;
   const string& mean_value = FLAGS_mean_value;
-  const string& file_type = FLAGS_file_type;
   const string& out_file = FLAGS_out_file;
   const float confidence_threshold = FLAGS_confidence_threshold;
 
@@ -284,71 +281,49 @@ int main(int argc, char** argv) {
   }
   std::ostream out(buf);
 
+  //make the stored vector
+  std::vector<cv::Mat> warpImgs;
+
   // Process image one by one.
+  int width = 864;
+  int height = 864;
+  std::vector<std::pair<double, double> > params;
   std::ifstream infile(argv[3]);
   std::string file;
-  while (infile >> file) {
-    if (file_type == "image") {
-      cv::Mat img = cv::imread(file, -1);
-      CHECK(!img.empty()) << "Unable to decode image " << file;
-      std::vector<vector<float> > detections = detector.Detect(img);
-
-      /* Print the detection results. */
-      for (int i = 0; i < detections.size(); ++i) {
-        const vector<float>& d = detections[i];
-        // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
-        CHECK_EQ(d.size(), 7);
-        const float score = d[2];
-        if (score >= confidence_threshold) {
-          out << file << " ";
-          out << static_cast<int>(d[1]) << " ";
-          out << score << " ";
-          out << static_cast<int>(d[3] * img.cols) << " ";
-          out << static_cast<int>(d[4] * img.rows) << " ";
-          out << static_cast<int>(d[5] * img.cols) << " ";
-          out << static_cast<int>(d[6] * img.rows) << std::endl;
-        }
+  infile >> file;
+  cv::Mat img = cv::imread(file, -1);
+  params = MakeWarpImgList(img, warpImgs, width, height);
+  for(int i = 0; i < warpImgs.size(); i++){
+    cv::Mat im = warpImgs[i];
+    std::vector<vector<float> > detections = detector.Detect(im);
+    std::pair<double, double> param = params[i];
+    /* Print the detection results. */
+    for (int i = 0; i < detections.size(); ++i) {
+      const vector<float>& d = detections[i];
+      // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
+      CHECK_EQ(d.size(), 7);
+      const float score = d[2];
+      if (score >= confidence_threshold) {
+        std::vector<double> c;
+        c.push_back(static_cast<double>(d[3] * im.cols));
+        c.push_back(static_cast<double>(d[4] * im.rows));
+        c.push_back(static_cast<double>(d[5] * im.cols));
+        c.push_back(static_cast<double>(d[6] * im.rows));
+        std::vector<double> r;
+        WarpCoord2Pano(img, im, param.first, param.second, c, r);
+        out << file << " ";
+        //out << static_cast<int>(d[1]) << " ";
+        out << d[1] << " ";
+        out << score << " ";
+        out << static_cast<int>(r[0]) << " ";
+        out << static_cast<int>(r[1]) << " ";
+        out << static_cast<int>(r[2]) << " ";
+        out << static_cast<int>(r[3]) << std::endl;
+        //out << static_cast<int>(d[3] * im.cols) << " ";
+        //out << static_cast<int>(d[4] * im.rows) << " ";
+        //out << static_cast<int>(d[5] * im.cols) << " ";
+        //out << static_cast<int>(d[6] * im.rows) << std::endl;
       }
-    } else if (file_type == "video") {
-      cv::VideoCapture cap(file);
-      if (!cap.isOpened()) {
-        LOG(FATAL) << "Failed to open video: " << file;
-      }
-      cv::Mat img;
-      int frame_count = 0;
-      while (true) {
-        bool success = cap.read(img);
-        if (!success) {
-          LOG(INFO) << "Process " << frame_count << " frames from " << file;
-          break;
-        }
-        CHECK(!img.empty()) << "Error when read frame";
-        std::vector<vector<float> > detections = detector.Detect(img);
-
-        /* Print the detection results. */
-        for (int i = 0; i < detections.size(); ++i) {
-          const vector<float>& d = detections[i];
-          // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
-          CHECK_EQ(d.size(), 7);
-          const float score = d[2];
-          if (score >= confidence_threshold) {
-            out << file << "_";
-            out << std::setfill('0') << std::setw(6) << frame_count << " ";
-            out << static_cast<int>(d[1]) << " ";
-            out << score << " ";
-            out << static_cast<int>(d[3] * img.cols) << " ";
-            out << static_cast<int>(d[4] * img.rows) << " ";
-            out << static_cast<int>(d[5] * img.cols) << " ";
-            out << static_cast<int>(d[6] * img.rows) << std::endl;
-          }
-        }
-        ++frame_count;
-      }
-      if (cap.isOpened()) {
-        cap.release();
-      }
-    } else {
-      LOG(FATAL) << "Unknown file_type: " << file_type;
     }
   }
   return 0;
