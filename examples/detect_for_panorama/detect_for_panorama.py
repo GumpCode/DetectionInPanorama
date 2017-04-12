@@ -16,24 +16,29 @@ import sys
 import glob
 import subprocess
 
-HOMEDIR = os.path.expanduser("~")
-CURDIR = os.path.dirname(os.path.realpath(__file__))
+#HOMEDIR = os.path.expanduser("~")
+#CURDIR = os.path.dirname(os.path.realpath(__file__))
 
 caffe_root = "."
+confidence_threshold = 0.1
 model_file = "{}/models/VOC0712/SSD_300x300/deploy.prototxt".format(caffe_root)
 weight_file = "{}/models/VOC0712/SSD_300x300/VGG_VOC0712_SSD_300x300_iter_120000.caffemodel".format(caffe_root)
-imglist_file = "{}/examples/detect_for_panorama/images/images_list.txt".format(caffe_root)
-output_file = "{}/examples/detect_for_panorama/images/output.txt".format(caffe_root)
-images_dir = "{}/examples/detect_for_panorama/images".format(caffe_root)
-confidence_threshold = 0.6
+types = ['part', 'full']
 
-#with open(imglist_file, 'w') as f:
-#    images = glob.glob("{}/*.jpg".format(images_dir))
-#    for im in images:
-#        f.write(im + '\n')
+for t in types:
+    imglist_file = "{}/examples/detect_for_panorama/images/{}/images_list.txt".format(caffe_root, t)
+    output_file = "{}/examples/detect_for_panorama/images/{}/output.txt".format(caffe_root, t)
+    images_dir = "{}/examples/detect_for_panorama/images/{}".format(caffe_root, t)
+    flag = t
 
-cmd = "./build/examples/detect_for_panorama/detect4panorama.bin --out_file={} --confidence_threshold={} {} {} {}".format(
-        output_file, confidence_threshold, model_file, weight_file, imglist_file)
-print cmd
-process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
-output = process.communicate()[0]
+    with open(imglist_file, 'w') as f:
+        images = glob.glob("{}/*.jpg".format(images_dir))
+        for im in images:
+            f.write(im + '\n')
+
+    cmd = "./build/examples/detect_for_panorama/detect4panorama.bin --out_file={} --confidence_threshold={} --detected_flag={} {} {} {}".format(
+            output_file, confidence_threshold, flag,
+            model_file, weight_file, imglist_file)
+    print cmd
+    process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
+    output = process.communicate()[0]
