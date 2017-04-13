@@ -288,23 +288,29 @@ int main(int argc, char** argv) {
   std::vector<cv::Mat> warpImgs;
 
   // Process image one by one.
-  int width = 864;
-  int height = 864;
-  std::vector<std::pair<double, double> > params;
+  double width = 864.0;
+  double height = 864.0;
+  double p[] = {width, height, CV_PI/2, 0.0, 0.0, 0.0,
+         width, height, CV_PI/2, CV_PI/2, 0.0, 0.0,
+         width, height, CV_PI/2, CV_PI, 0.0, 0.0,
+         width, height, CV_PI/2, CV_PI*3/2, 0.0, 0.0,
+         width, height, CV_PI/2, 0.0, CV_PI/2, 0.0,
+         width, height, CV_PI/2, 0.0, -(CV_PI/2), 0.0};
+  std::vector<double> params(p, p+36);
   std::ifstream infile(argv[3]);
   std::string file;
   while(infile >> file){
     if(flag == "full"){
       cv::Mat img = cv::imread(file, -1);
       CHECK(!img.empty()) << "Unable to decode image " << file;
-      params = MakeWarpImgList(img, warpImgs, width, height);
+      MakeWarpImgList(img, warpImgs, params);
+      int j = 0;
       for(int i = 0; i < warpImgs.size(); i++){
         cv::Mat im = warpImgs[i];
         std::vector<vector<float> > detections = detector.Detect(im);
-        std::pair<double, double> param = params[i];
         /* Print the detection results. */
-        for (int i = 0; i < detections.size(); ++i) {
-          const vector<float>& d = detections[i];
+        for (int k = 0; k < detections.size(); ++k) {
+          const vector<float>& d = detections[k];
           // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
           CHECK_EQ(d.size(), 7);
           const float score = d[2];
@@ -314,12 +320,10 @@ int main(int argc, char** argv) {
             c.push_back(static_cast<double>(d[4] * im.rows));
             c.push_back(static_cast<double>(d[5] * im.cols));
             c.push_back(static_cast<double>(d[6] * im.rows));
-            //c.push_back(static_cast<double>(1));
-            //c.push_back(static_cast<double>(1));
-            //c.push_back(static_cast<double>(0.999999999999 * im.cols));
-            //c.push_back(static_cast<double>(0.999999999999 * im.rows));
             std::vector<double> r;
-            WarpCoord2Pano(img, im, param.first, param.second, c, r);
+            //WarpCoord2Pano(img, im, param.first, param.second, c, r);
+            WarpCoord2Pano2(img, im, static_cast<int>(params[j]), static_cast<int>(params[j+1]), params[j+2], params[j+3], params[j+4], params[j+5], c, r);
+            j += 6;
             out << file << " ";
             out << d[1] << " ";
             out << score << " ";

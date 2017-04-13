@@ -88,17 +88,17 @@ if __name__ == "__main__":
             for line in f.readlines():
                 img_name, label, score, xmin, ymin, xmax, ymax = line.strip("\n").split()
                 #print img_name, label, score, xmin
-                #if xmin < 0 or ymin < 0 or xmax < 0 or ymax < 0:
-                #    continue
-                #img_file = "{}/{}".format(img_dir, img_name)
-                img_file = img_name
-                result = dict()
-                result["label"] = int(label)
-                result["score"] = float(score)
-                result["bbox"] = [float(xmin), float(ymin), float(xmax), float(ymax)]
-                if img_file not in img_results:
-                    img_results[img_file] = [result]
+                if xmin < 0 or ymin < 0 or xmax < 0 or ymax < 0:
+                   pass
                 else:
-                    img_results[img_file].append(result)
+                    img_file = img_name
+                    result = dict()
+                    result["label"] = int(label)
+                    result["score"] = float(score)
+                    result["bbox"] = [float(xmin), float(ymin), float(xmax), float(ymax)]
+                    if img_file not in img_results:
+                        img_results[img_file] = [result]
+                    else:
+                        img_results[img_file].append(result)
         for img_file, results in img_results.iteritems():
             showResults(img_file, results, labelmap, save_dir)
