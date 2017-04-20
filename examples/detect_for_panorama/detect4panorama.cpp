@@ -59,11 +59,8 @@ Detector::Detector(const string& model_file,
                    const string& weights_file,
                    const string& mean_file,
                    const string& mean_value) {
-#ifdef CPU_ONLY
-  Caffe::set_mode(Caffe::CPU);
-#else
+  //Caffe::set_mode(Caffe::CPU);
   Caffe::set_mode(Caffe::GPU);
-#endif
 
   /* Load the network. */
   net_.reset(new Net<float>(model_file, TEST));
@@ -290,50 +287,38 @@ int main(int argc, char** argv) {
   // Process image one by one.
   double width = 864.0;
   double height = 864.0;
-  double p[] = {width, height, CV_PI/2, 0.0, 0.0, 0.0,
-         width, height, CV_PI/2, CV_PI/2, 0.0, 0.0,
-         width, height, CV_PI/2, CV_PI, 0.0, 0.0,
-         width, height, CV_PI/2, CV_PI*3/2, 0.0, 0.0,
-         width, height, CV_PI/2, 0.0, CV_PI/2, 0.0,
-         width, height, CV_PI/2, 0.0, -(CV_PI/2), 0.0};
-  std::vector<double> params(p, p+36);
+  //double p[] = {width, height, CV_PI/2, 0.0, 0.0, 0.0,
+  //[width, height, hFOV, yaw, pitch, roll]
+  double p[] = {CV_PI/2, 0.0, 0.0, 0.0,
+          CV_PI/2, CV_PI/2, 0.0, 0.0,
+          CV_PI/2, CV_PI, 0.0, 0.0,
+          CV_PI/2, CV_PI*3/2, 0.0, 0.0,
+          CV_PI/2, 0.0, CV_PI/2, 0.0,
+          CV_PI/2, 0.0, -(CV_PI/2), 0.0};
+  std::vector<double> params(p, p+24);
   std::ifstream infile(argv[3]);
   std::string file;
+  std::vector<std::vector<float> > detections;
   while(infile >> file){
     if(flag == "full"){
       cv::Mat img = cv::imread(file, -1);
       CHECK(!img.empty()) << "Unable to decode image " << file;
-      MakeWarpImgList(img, warpImgs, params);
-      int j = 0;
+      MakeWarpImgList(img, warpImgs, params, width, height);
+      int index = 0;
       for(int i = 0; i < warpImgs.size(); i++){
         cv::Mat im = warpImgs[i];
-        std::vector<vector<float> > detections = detector.Detect(im);
-        /* Print the detection results. */
-        for (int k = 0; k < detections.size(); ++k) {
-          const vector<float>& d = detections[k];
-          // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
-          CHECK_EQ(d.size(), 7);
-          const float score = d[2];
-          if (score >= confidence_threshold) {
-            std::vector<double> c;
-            c.push_back(static_cast<double>(d[3] * im.cols));
-            c.push_back(static_cast<double>(d[4] * im.rows));
-            c.push_back(static_cast<double>(d[5] * im.cols));
-            c.push_back(static_cast<double>(d[6] * im.rows));
-            std::vector<double> r;
-            //WarpCoord2Pano(img, im, param.first, param.second, c, r);
-            WarpCoord2Pano2(img, im, static_cast<int>(params[j]), static_cast<int>(params[j+1]), params[j+2], params[j+3], params[j+4], params[j+5], c, r);
-            j += 6;
-            out << file << " ";
-            out << d[1] << " ";
-            out << score << " ";
-            out << static_cast<int>(r[0]) << " ";
-            out << static_cast<int>(r[1]) << " ";
-            out << static_cast<int>(r[2]) << " ";
-            out << static_cast<int>(r[3]) << std::endl;
-          }
+        std::vector<std::vector<float> > detections = detector.Detect(im);
+        //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
+        //CHECK_EQ(d.size(), 7);
+        std::vector<double> param;
+        for(int j = 0; j < 4; j++){
+          param.push_back(params[index + j]); 
         }
+        index += 4;
+        convertWarpCoord2Pano(img, detections, param, width, height, confidence_threshold, im);
+        param.clear();
       }
+      cv::imwrite("output.jpg", img);
     } else if(flag == "part"){
       cv::Mat img = cv::imread(file, -1);
       CHECK(!img.empty()) << "Unable to decode image " << file;

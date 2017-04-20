@@ -1,7 +1,9 @@
 #include "opencv2/opencv.hpp"
+
 using namespace cv;
+using namespace std;
 
 int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, int width, int height, double hFOV, double yaw, double pitch, double roll);
-int WarpCoord2Pano(cv::Mat& PanoImg, cv::Mat& WarpImg, double yaw, double pitch, std::vector<double>& coords, std::vector<double>& result);
-int WarpCoord2Pano2(Mat& PanoImg, Mat& WarpImg, int width, int height, double hFOV, double yaw, double pitch, double roll, std::vector<double>& coords, std::vector<double>& result);
-void MakeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<double> params);
+void MakeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<double>& params, int width, int height);
+int BoxesWarp(vector<double>& selectedBoxs, int width, int height, double hFOV, double yaw, double pitch, double roll, cv::Mat& panoImg, cv::Mat& im);
+int convertWarpCoord2Pano(cv::Mat& panoImg, std::vector<std::vector<float> >& detections, std::vector<double>& params, int warpWidth, int warpHeight, float confidence_threshold, cv::Mat& im);
