@@ -20,7 +20,7 @@ import subprocess
 #CURDIR = os.path.dirname(os.path.realpath(__file__))
 
 caffe_root = "."
-confidence_threshold = 0.5
+confidence_threshold = 0.8
 model_file = "{}/models/VOC0712/SSD_300x300/deploy.prototxt".format(caffe_root)
 weight_file = "{}/models/VOC0712/SSD_300x300/VGG_VOC0712_SSD_300x300_iter_120000.caffemodel".format(caffe_root)
 types = ['part', 'full']

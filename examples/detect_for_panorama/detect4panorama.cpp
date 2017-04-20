@@ -285,17 +285,36 @@ int main(int argc, char** argv) {
   std::vector<cv::Mat> warpImgs;
 
   // Process image one by one.
-  double width = 864.0;
-  double height = 864.0;
-  //double p[] = {width, height, CV_PI/2, 0.0, 0.0, 0.0,
-  //[width, height, hFOV, yaw, pitch, roll]
-  double p[] = {CV_PI/2, 0.0, 0.0, 0.0,
-          CV_PI/2, CV_PI/2, 0.0, 0.0,
-          CV_PI/2, CV_PI, 0.0, 0.0,
-          CV_PI/2, CV_PI*3/2, 0.0, 0.0,
-          CV_PI/2, 0.0, CV_PI/2, 0.0,
-          CV_PI/2, 0.0, -(CV_PI/2), 0.0};
-  std::vector<double> params(p, p+24);
+  double width = 300.0;
+  double height = 300.0;
+  std::vector<double> params;
+  //const double angle_47 = 47*CV_PI/180;
+  const double angle_45 = 45*CV_PI/180;
+  const double angle_68 = 68*CV_PI/180;
+  const double hFOV = 47*CV_PI/180;
+  for(double pitch = -angle_68; pitch < angle_68; pitch += angle_45)
+  {
+    for(double yaw = 0; yaw < 2*CV_PI - 0.1; yaw += angle_45)
+    {
+      //[hFOV, yaw, pitch, roll]
+      params.push_back(hFOV);
+      params.push_back(yaw);
+      params.push_back(pitch);
+      params.push_back(0);
+    }
+  }
+
+  //for top view
+  params.push_back(hFOV);
+  params.push_back(0);
+  params.push_back(angle_68+angle_45);
+  params.push_back(0);
+  //for bottom view
+  params.push_back(hFOV);
+  params.push_back(0);
+  params.push_back(-(angle_68+angle_45));
+  params.push_back(0);
+
   std::ifstream infile(argv[3]);
   std::string file;
   std::vector<std::vector<float> > detections;
@@ -307,6 +326,12 @@ int main(int argc, char** argv) {
       int index = 0;
       for(int i = 0; i < warpImgs.size(); i++){
         cv::Mat im = warpImgs[i];
+        //std::string str;
+        //std::stringstream ss;
+        //ss << i;
+        //ss >> str;
+        //str = "testImages/" + str + ".jpg";
+        //cv::imwrite(str, im);
         std::vector<std::vector<float> > detections = detector.Detect(im);
         //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
         //CHECK_EQ(d.size(), 7);
@@ -315,7 +340,7 @@ int main(int argc, char** argv) {
           param.push_back(params[index + j]); 
         }
         index += 4;
-        convertWarpCoord2Pano(img, detections, param, width, height, confidence_threshold, im);
+        convertWarpCoord2Pano(img, detections, param, width, height, confidence_threshold);
         param.clear();
       }
       cv::imwrite("output.jpg", img);

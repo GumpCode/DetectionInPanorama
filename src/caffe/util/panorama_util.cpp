@@ -109,7 +109,7 @@ int PanoImg2Warp(Mat& srcPanoImg, Mat& dstWarpImg, int width, int height, double
   return 0;
 }
 
-int BoxesWarp(vector<double>& selectedBoxs, int width, int height, double hFOV, double yaw, double pitch, double roll, cv::Mat& panoImg, cv::Mat& partImg)
+int BoxesWarp(vector<double>& selectedBoxs, int width, int height, double hFOV, double yaw, double pitch, double roll, cv::Mat& panoImg)
 {
     int panoWidth = panoImg.cols;
     int panoHeight = panoImg.rows;
@@ -158,16 +158,6 @@ int BoxesWarp(vector<double>& selectedBoxs, int width, int height, double hFOV, 
                   Point(selectedBoxs[i+2], selectedBoxs[i+3]), Scalar(255, 0, 255), 2);
     }
 
-    cv::Mat a = partImg.clone();
-    for (size_t i=0; i<selectedBoxs.size(); i+=4)
-    {
-        rectangle(a, Point(selectedBoxs[i], selectedBoxs[i+1]),
-                  Point(selectedBoxs[i+2], selectedBoxs[i+3]), Scalar(255, 0, 255), 2);
-    }
-    cv::imwrite("aaaaaa.jpg", a);
-
-
-
     double F  = (width/2)/tan(hFOV/2.f);
     double du = panoWidth/2/CV_PI;
     double dv = panoHeight/CV_PI;
@@ -207,13 +197,11 @@ int BoxesWarp(vector<double>& selectedBoxs, int width, int height, double hFOV, 
     remap(boxImg, dstPanoBox, warpMap, cv::Mat(), CV_INTER_CUBIC);
     //addWeighted(dstPanoBox, 0.5, panoImg, 0.4, 0.0, panoImg);
     add(dstPanoBox, panoImg, panoImg);
-    cv::imwrite("b.jpg", panoImg);
-    cv::waitKey(0);
 
     return 0;
 }
 
-int convertWarpCoord2Pano(cv::Mat& panoImg, std::vector<std::vector<float> >& detections, std::vector<double>& param, int warpWidth, int warpHeight, float confidence_threshold, cv::Mat& im)
+int convertWarpCoord2Pano(cv::Mat& panoImg, std::vector<std::vector<float> >& detections, std::vector<double>& param, int warpWidth, int warpHeight, float confidence_threshold)
 {
   cv::Mat result;
   std::vector<double> boxes;
@@ -227,7 +215,7 @@ int convertWarpCoord2Pano(cv::Mat& panoImg, std::vector<std::vector<float> >& de
       boxes.push_back(static_cast<double>(detection[6] * warpHeight)); 
     }
   }
-  BoxesWarp(boxes, warpWidth, warpHeight, param[0], param[1], param[2], param[3], panoImg, im);
+  BoxesWarp(boxes, warpWidth, warpHeight, param[0], param[1], param[2], param[3], panoImg);
   return 0;
 }
 
