@@ -238,8 +238,8 @@ DEFINE_string(out_file, "",
     "If provided, store the detection results in the out_file.");
 DEFINE_double(confidence_threshold, 0.01,
     "Only store detections with score higher than the threshold.");
-DEFINE_string(detected_flag, "",
-    "the flag point to detect for full or part.");
+//DEFINE_string(detected_flag, "",
+//    "the flag point to detect for full or part.");
 
 int main(int argc, char** argv) {
   ::google::InitGoogleLogging(argv[0]);
@@ -264,23 +264,23 @@ int main(int argc, char** argv) {
   const string& weights_file = argv[2];
   const string& mean_file = FLAGS_mean_file;
   const string& mean_value = FLAGS_mean_value;
-  const string& out_file = FLAGS_out_file;
-  const string& flag = FLAGS_detected_flag;
+  //const string& out_file = FLAGS_out_file;
+  //const string& flag = FLAGS_detected_flag;
   const float confidence_threshold = FLAGS_confidence_threshold;
 
   // Initialize the network.
   Detector detector(model_file, weights_file, mean_file, mean_value);
 
   // Set the output mode.
-  std::streambuf* buf = std::cout.rdbuf();
-  std::ofstream outfile;
-  if (!out_file.empty()) {
-    outfile.open(out_file.c_str());
-    if (outfile.good()) {
-      buf = outfile.rdbuf();
-    }
-  }
-  std::ostream out(buf);
+  //std::streambuf* buf = std::cout.rdbuf();
+  //std::ofstream outfile;
+  //if (!out_file.empty()) {
+  //  outfile.open(out_file.c_str());
+  //  if (outfile.good()) {
+  //    buf = outfile.rdbuf();
+  //  }
+  //}
+  //std::ostream out(buf);
 
   //make the stored vector
 
@@ -319,8 +319,8 @@ int main(int argc, char** argv) {
   params.push_back(-CV_PI/2);
   params.push_back(roll);
 
-  std::vector<cv::Mat> rotaMats = makeRotatMatList(params);
-  std::vector<cv::Mat> rotaMatsInv = convertRotatMat2Inv(rotaMats);
+  std::vector<cv::Mat> rotaMats = makeRotaMatList(params);
+  std::vector<cv::Mat> rotaMatsInv = convertRotaMat2Inv(rotaMats);
 
   std::ifstream infile(argv[3]);
   std::string file;
@@ -336,53 +336,18 @@ int main(int argc, char** argv) {
     cv::Mat img = cv::imread(file, -1);
     CHECK(!img.empty()) << "Unable to decode image " << file;
     makeWarpImgList(img, warpImgs, rotaMats, size, hFOV);
-    if(flag == "full"){
-      std::vector<std::pair<double, double> > boxesCoords;
-      for(int i = 0; i < warpImgs.size(); i++){
-        cv::Mat im = warpImgs[i];
-        /*
-        std::string s;
-        std::stringstream ss;
-        ss << i;
-        ss >> s;
-        s = s +".jpg";
-        cv::imwrite(s, im);
-        */
-        cv::Mat rotaMat = rotaMats[i];
-        std::vector<std::vector<float> > detections = detector.Detect(im);
-        //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
+    std::vector<std::pair<double, double> > boxesCoords;
+    for(int i = 0; i < warpImgs.size(); i++){
+      cv::Mat im = warpImgs[i];
+      cv::Mat rotaMat = rotaMats[i];
+      std::vector<std::vector<float> > detections = detector.Detect(im);
+      //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
 
-        convertWarpCoord2Pano(boxesCoords, detections, size,
-            confidence_threshold, rotaMat, hFOV);
-      }
-      drawCoordInPanoImg(img, boxesCoords);
-      cv::imwrite("out.jpg", img);
-
-    } else if(flag == "part"){
-      cv::Mat img = cv::imread(file, -1);
-      CHECK(!img.empty()) << "Unable to decode image " << file;
-      std::vector<vector<float> > detections = detector.Detect(img);
-
-      /* Print the detection results. */
-      for (int i = 0; i < detections.size(); ++i) {
-        const vector<float>& d = detections[i];
-        // Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
-        CHECK_EQ(d.size(), 7);
-        const float score = d[2];
-        if (score >= confidence_threshold) {
-          out << file << " ";
-          out << static_cast<int>(d[1]) << " ";
-          out << score << " ";
-          out << static_cast<int>(d[3] * img.cols) << " ";
-          out << static_cast<int>(d[4] * img.rows) << " ";
-          out << static_cast<int>(d[5] * img.cols) << " ";
-          out << static_cast<int>(d[6] * img.rows) << std::endl;
-        }
-      }
-    } else{
-      std::cout << "unidentified type" << std::endl;
-      return 0;
+      convertWarpCoord2Pano(boxesCoords, detections, size,
+          confidence_threshold, rotaMat, hFOV);
     }
+    drawCoordInPanoImg(img, boxesCoords);
+    cv::imwrite("out.jpg", img);
   }
   gettimeofday(&end,NULL);
   timer = 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;

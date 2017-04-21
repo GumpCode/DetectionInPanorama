@@ -13,61 +13,61 @@
 using namespace cv;
 using namespace std;
 
-cv::Mat computeRotatMat(double yaw, double pitch, double roll)
+cv::Mat computeRotaMat(double yaw, double pitch, double roll)
 {
-  cv::Mat rotatMat;
-  Mat rotatMatPitch = cv::Mat(3, 3, CV_64F);
-  rotatMatPitch.at<double>(0, 0) = 1;
-  rotatMatPitch.at<double>(0, 1) = 0;
-  rotatMatPitch.at<double>(0, 2) = 0;
-  rotatMatPitch.at<double>(1, 0) = 0;
-  rotatMatPitch.at<double>(1, 1) = cos(-pitch);
-  rotatMatPitch.at<double>(1, 2) = -sin(-pitch);
-  rotatMatPitch.at<double>(2, 0) = 0;
-  rotatMatPitch.at<double>(2, 1) = sin(-pitch);
-  rotatMatPitch.at<double>(2, 2) = cos(-pitch);
+  cv::Mat rotaMat;
+  Mat rotaMatPitch = cv::Mat(3, 3, CV_64F);
+  rotaMatPitch.at<double>(0, 0) = 1;
+  rotaMatPitch.at<double>(0, 1) = 0;
+  rotaMatPitch.at<double>(0, 2) = 0;
+  rotaMatPitch.at<double>(1, 0) = 0;
+  rotaMatPitch.at<double>(1, 1) = cos(-pitch);
+  rotaMatPitch.at<double>(1, 2) = -sin(-pitch);
+  rotaMatPitch.at<double>(2, 0) = 0;
+  rotaMatPitch.at<double>(2, 1) = sin(-pitch);
+  rotaMatPitch.at<double>(2, 2) = cos(-pitch);
 
-  Mat rotatMatYaw = cv::Mat(3, 3, CV_64F);
-  rotatMatYaw.at<double>(0, 0) = cos(yaw);
-  rotatMatYaw.at<double>(0, 1) = 0;
-  rotatMatYaw.at<double>(0, 2) = sin(yaw);
-  rotatMatYaw.at<double>(1, 0) = 0;
-  rotatMatYaw.at<double>(1, 1) = 1;
-  rotatMatYaw.at<double>(1, 2) = 0;
-  rotatMatYaw.at<double>(2, 0) = -sin(yaw);
-  rotatMatYaw.at<double>(2, 1) = 0;
-  rotatMatYaw.at<double>(2, 2) = cos(yaw);
+  Mat rotaMatYaw = cv::Mat(3, 3, CV_64F);
+  rotaMatYaw.at<double>(0, 0) = cos(yaw);
+  rotaMatYaw.at<double>(0, 1) = 0;
+  rotaMatYaw.at<double>(0, 2) = sin(yaw);
+  rotaMatYaw.at<double>(1, 0) = 0;
+  rotaMatYaw.at<double>(1, 1) = 1;
+  rotaMatYaw.at<double>(1, 2) = 0;
+  rotaMatYaw.at<double>(2, 0) = -sin(yaw);
+  rotaMatYaw.at<double>(2, 1) = 0;
+  rotaMatYaw.at<double>(2, 2) = cos(yaw);
 
-  Mat rotatMatRoll = cv::Mat(3, 3, CV_64F);
-  rotatMatRoll.at<double>(0, 0) = cos(roll);
-  rotatMatRoll.at<double>(0, 1) = -sin(roll);
-  rotatMatRoll.at<double>(0, 2) = 0;
-  rotatMatRoll.at<double>(1, 0) = sin(roll);
-  rotatMatRoll.at<double>(1, 1) = cos(roll);
-  rotatMatRoll.at<double>(1, 2) = 0;
-  rotatMatRoll.at<double>(2, 0) = 0;
-  rotatMatRoll.at<double>(2, 1) = 0;
-  rotatMatRoll.at<double>(2, 2) = 1;
+  Mat rotaMatRoll = cv::Mat(3, 3, CV_64F);
+  rotaMatRoll.at<double>(0, 0) = cos(roll);
+  rotaMatRoll.at<double>(0, 1) = -sin(roll);
+  rotaMatRoll.at<double>(0, 2) = 0;
+  rotaMatRoll.at<double>(1, 0) = sin(roll);
+  rotaMatRoll.at<double>(1, 1) = cos(roll);
+  rotaMatRoll.at<double>(1, 2) = 0;
+  rotaMatRoll.at<double>(2, 0) = 0;
+  rotaMatRoll.at<double>(2, 1) = 0;
+  rotaMatRoll.at<double>(2, 2) = 1;
 
-  rotatMat = rotatMatYaw*rotatMatPitch*rotatMatRoll;
+  rotaMat = rotaMatYaw*rotaMatPitch*rotaMatRoll;
   
-  return rotatMat;
+  return rotaMat;
 }
 
 
-std::vector<cv::Mat> makeRotatMatList(std::vector<double>& params)
+std::vector<cv::Mat> makeRotaMatList(std::vector<double>& params)
 {
-  std::vector<cv::Mat> rotatMats;
+  std::vector<cv::Mat> rotaMats;
   for(size_t i = 0; i < params.size(); i += 3)
   {
-	cv::Mat rotatMat = computeRotatMat(params[i], params[i+1], params[i+2]);
-    rotatMats.push_back(rotatMat);
+	cv::Mat rotaMat = computeRotaMat(params[i], params[i+1], params[i+2]);
+    rotaMats.push_back(rotaMat);
   }
-  return rotatMats;
+  return rotaMats;
 }
 
 
-int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotatMat, double hFOV, int width, int height)
+int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, double hFOV, int width, int height)
 {
   int srcWidth  = srcPanoImg.cols;
   int srcHeight = srcPanoImg.rows;
@@ -97,7 +97,7 @@ int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotatMat, do
       tmpCoor.at<double>(1) = (double)(height/2-j);
       tmpCoor.at<double>(2) = F;
 
-      tmpCoor = rotatMat*tmpCoor;
+      tmpCoor = rotaMat*tmpCoor;
       normalize(tmpCoor, tmpCoor);
 
       double latitude  = asin(tmpCoor.at<double>(1));
@@ -116,29 +116,29 @@ int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotatMat, do
   return 0;
 }
 
-void makeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<cv::Mat>& rotatMats, const std::vector<int> size, double hFOV)
+void makeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<cv::Mat>& rotaMats, const std::vector<int> size, double hFOV)
 {
   int width = size[0];
   int height = size[1];
   size_t index = 0;
   cv::Mat dst;
-  while(index < rotatMats.size()){
-    PanoImg2Warp(srcPanoImg, dst, rotatMats[index++], hFOV, width, height);
+  while(index < rotaMats.size()){
+    PanoImg2Warp(srcPanoImg, dst, rotaMats[index++], hFOV, width, height);
     warpImgList.push_back(dst);
   }
 }
 
-std::vector<cv::Mat> convertRotatMat2Inv(std::vector<cv::Mat> rotatMats)
+std::vector<cv::Mat> convertRotaMat2Inv(std::vector<cv::Mat> rotaMats)
 {
-  std::vector<cv::Mat> rotatMatsInv;
-  for(size_t i = 0; i < rotatMats.size(); i++)
+  std::vector<cv::Mat> rotaMatsInv;
+  for(size_t i = 0; i < rotaMats.size(); i++)
   {
-    rotatMatsInv.push_back(rotatMats[i].inv());
+    rotaMatsInv.push_back(rotaMats[i].inv());
   }
-  return rotatMatsInv;
+  return rotaMatsInv;
 }
 
-std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<int> size, double F, double du, double dv, cv::Mat& rotatMat)
+std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<int> size, double F, double du, double dv, cv::Mat& rotaMat)
 {
   int warpWidth = size[0];
   int warpHeight = size[1];
@@ -150,7 +150,7 @@ std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<in
   tmpCoor.at<double>(1) = static_cast<double>(warpHeight/2 - cols);
   tmpCoor.at<double>(2) = F;
 
-  tmpCoor = rotatMat*tmpCoor;
+  tmpCoor = rotaMat*tmpCoor;
   normalize(tmpCoor, tmpCoor);
 
   double latitude  = asin(tmpCoor.at<double>(1));
@@ -166,7 +166,7 @@ std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<in
 
 
 bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, std::vector<std::vector<float> >& detections,
-		const std::vector<int> size, float confidence_threshold, cv::Mat& rotatMat, double hFOV)
+		const std::vector<int> size, float confidence_threshold, cv::Mat& rotaMat, double hFOV)
 {
   int warpWidth = size[0];
   int warpHeight = size[1];
@@ -186,20 +186,20 @@ bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, 
       //[xmin, ymin, xmax, ymax]
       for(double rows = xmin; rows < xmax; rows += 1){
         double cols = ymin;
-        std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotatMat);
+        std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord1);
 
         cols = ymax;
-        std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotatMat);
+        std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord2);
       }
       for(double cols = ymin; cols < ymax; cols += 1){
         double rows = xmin;
-        std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotatMat);
+        std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord1);
 
         rows = xmax;
-        std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotatMat);
+        std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord2);
       }
     }
