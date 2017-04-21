@@ -19,3 +19,6 @@ bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, 
 		const std::vector<int> size, float confidence_threshold, cv::Mat& rotaMat, double hFOV);
 
 bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> > boxesCoords);
+
+bool drawCoordInWarpImg(cv::Mat& warpImg, std::vector<std::vector<float> >& detections, double confidence_threshold);
+bool fixPointRange(int& x, int& y, int width, int height);

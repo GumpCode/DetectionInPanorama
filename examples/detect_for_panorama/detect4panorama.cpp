@@ -338,13 +338,24 @@ int main(int argc, char** argv) {
     makeWarpImgList(img, warpImgs, rotaMats, size, hFOV);
     std::vector<std::pair<double, double> > boxesCoords;
     for(int i = 0; i < warpImgs.size(); i++){
+      std::cout << "No." << i << std::endl;
       cv::Mat im = warpImgs[i];
       cv::Mat rotaMat = rotaMats[i];
-      std::vector<std::vector<float> > detections = detector.Detect(im);
       //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
+      std::vector<std::vector<float> > detections = detector.Detect(im);
+      drawCoordInWarpImg(im, detections, confidence_threshold);
+      std::stringstream ss;
+      ss << i;
+      std::string s;
+      ss >> s;
+      s = s + ".jpg";
+      cv::imwrite(s, im);
 
       convertWarpCoord2Pano(boxesCoords, detections, size,
           confidence_threshold, rotaMat, hFOV);
+      //if(i==1){
+      //  break;
+      //}
     }
     drawCoordInPanoImg(img, boxesCoords);
     cv::imwrite("out.jpg", img);

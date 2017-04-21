@@ -210,7 +210,7 @@ bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, 
 bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> > boxesCoords)
 {
   std::cout << "size is " << boxesCoords.size() << std::endl;
-  for(int index = 0; index < boxesCoords.size(); index++)
+  for(size_t index = 0; index < boxesCoords.size(); index++)
   {
     int row = static_cast<int>(boxesCoords[index].first);
     int col = static_cast<int>(boxesCoords[index].second);
@@ -222,3 +222,42 @@ bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> 
 
   return true;
 }
+
+bool fixPointRange(int& x, int& y, int width, int height)
+{
+  if(x <= 0)
+  {
+    x = 1;
+  } else if(x > width){
+    x = width;
+  } else if(y <= 0){
+    y = 1;
+  } else if(y > height){
+    y = height;
+  }
+  return true;
+}
+
+bool drawCoordInWarpImg(cv::Mat& warpImg, std::vector<std::vector<float> >& detections, double confidence_threshold)
+{
+  //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
+  for(size_t i = 0; i < detections.size(); ++i)
+  {
+    const vector<float>& detection = detections[i];  
+    const float score = detection[2]; 
+    if (score >= confidence_threshold)
+    {
+      int xmin = static_cast<double>(detection[3] * warpImg.cols);
+      int ymin = static_cast<double>(detection[4] * warpImg.rows); 
+      int xmax = static_cast<double>(detection[5] * warpImg.cols); 
+      int ymax = static_cast<double>(detection[6] * warpImg.rows); 
+      fixPointRange(xmin, ymin, warpImg.cols, warpImg.rows);
+      fixPointRange(xmax, ymax, warpImg.cols, warpImg.rows);
+      std::cout << detection[3] << " " << detection[4] << " " << detection[5] << " " << detection[6] << std::endl;
+      std::cout << xmin << " " << ymin << " " << xmax << " " << ymax << std::endl;
+      cv::rectangle(warpImg, cv::Point(xmin, ymin), cv::Point(xmax, ymax), cv::Scalar(255, 0, 255), 2);
+    }
+  }
+  return true;
+}
+
