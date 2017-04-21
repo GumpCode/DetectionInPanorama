@@ -12,33 +12,10 @@
                       
 using namespace cv;
 using namespace std;
-using namespace caffe;
 
-int PanoImg2Warp(Mat& srcPanoImg, Mat& dstWarpImg, int width, int height, double hFOV, double yaw, double pitch, double roll)
+cv::Mat computeRotatMat(double yaw, double pitch, double roll)
 {
-  if (fabs(pitch)>CV_PI/2)
-  {
-    return 1;
-  }
-
-  int srcWidth  = srcPanoImg.cols;
-  int srcHeight = srcPanoImg.rows;
-
-  if (srcWidth != srcHeight*2)
-  {
-    return 2;
-  } 
-
-  if (hFOV <= 0 || hFOV >= CV_PI)
-  {
-    return 3;
-  }
-
-  if (width <= 0 || width <= 0)
-  {
-    return 4;
-  }
-
+  cv::Mat rotatMat;
   Mat rotatMatPitch = cv::Mat(3, 3, CV_64F);
   rotatMatPitch.at<double>(0, 0) = 1;
   rotatMatPitch.at<double>(0, 1) = 0;
@@ -72,8 +49,38 @@ int PanoImg2Warp(Mat& srcPanoImg, Mat& dstWarpImg, int width, int height, double
   rotatMatRoll.at<double>(2, 1) = 0;
   rotatMatRoll.at<double>(2, 2) = 1;
 
+  rotatMat = rotatMatYaw*rotatMatPitch*rotatMatRoll;
+  
+  return rotatMat;
+}
 
-  Mat rotatMat = rotatMatYaw*rotatMatPitch*rotatMatRoll;
+
+std::vector<cv::Mat> makeRotatMatList(std::vector<double>& params)
+{
+  std::vector<cv::Mat> rotatMats;
+  for(size_t i = 0; i < params.size(); i += 3)
+  {
+	cv::Mat rotatMat = computeRotatMat(params[i], params[i+1], params[i+2]);
+    rotatMats.push_back(rotatMat);
+  }
+  return rotatMats;
+}
+
+
+int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotatMat, double hFOV, int width, int height)
+{
+  int srcWidth  = srcPanoImg.cols;
+  int srcHeight = srcPanoImg.rows;
+
+  if (srcWidth != srcHeight*2)
+  {
+    return 2;
+  } 
+
+  if (width <= 0 || height <= 0)
+  {
+    return 4;
+  }
 
   double F  = (width/2)/tan(hFOV/2.f);
   double du = srcWidth/2/CV_PI;
@@ -109,124 +116,109 @@ int PanoImg2Warp(Mat& srcPanoImg, Mat& dstWarpImg, int width, int height, double
   return 0;
 }
 
-int BoxesWarp(vector<double>& selectedBoxs, int width, int height, double hFOV, double yaw, double pitch, double roll, cv::Mat& panoImg)
+void makeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<cv::Mat>& rotatMats, const std::vector<int> size, double hFOV)
 {
-    int panoWidth = panoImg.cols;
-    int panoHeight = panoImg.rows;
-    Mat rotatMatPitch = cv::Mat(3, 3, CV_64F);
-    rotatMatPitch.at<double>(0, 0) = 1;
-    rotatMatPitch.at<double>(0, 1) = 0;
-    rotatMatPitch.at<double>(0, 2) = 0;
-    rotatMatPitch.at<double>(1, 0) = 0;
-    rotatMatPitch.at<double>(1, 1) = cos(-pitch);
-    rotatMatPitch.at<double>(1, 2) = -sin(-pitch);
-    rotatMatPitch.at<double>(2, 0) = 0;
-    rotatMatPitch.at<double>(2, 1) = sin(-pitch);
-    rotatMatPitch.at<double>(2, 2) = cos(-pitch);
-
-    Mat rotatMatYaw = cv::Mat(3, 3, CV_64F);
-    rotatMatYaw.at<double>(0, 0) = cos(yaw);
-    rotatMatYaw.at<double>(0, 1) = 0;
-    rotatMatYaw.at<double>(0, 2) = sin(yaw);
-    rotatMatYaw.at<double>(1, 0) = 0;
-    rotatMatYaw.at<double>(1, 1) = 1;
-    rotatMatYaw.at<double>(1, 2) = 0;
-    rotatMatYaw.at<double>(2, 0) = -sin(yaw);
-    rotatMatYaw.at<double>(2, 1) = 0;
-    rotatMatYaw.at<double>(2, 2) = cos(yaw);
-
-    Mat rotatMatRoll = cv::Mat(3, 3, CV_64F);
-    rotatMatRoll.at<double>(0, 0) = cos(roll);
-    rotatMatRoll.at<double>(0, 1) = -sin(roll);
-    rotatMatRoll.at<double>(0, 2) = 0;
-    rotatMatRoll.at<double>(1, 0) = sin(roll);
-    rotatMatRoll.at<double>(1, 1) = cos(roll);
-    rotatMatRoll.at<double>(1, 2) = 0;
-    rotatMatRoll.at<double>(2, 0) = 0;
-    rotatMatRoll.at<double>(2, 1) = 0;
-    rotatMatRoll.at<double>(2, 2) = 1;
-
-    Mat rotatMat = rotatMatYaw*rotatMatPitch*rotatMatRoll;
-
-    ////////////////////////////////////////////////////////////
-
-    Mat boxImg = cv::Mat::zeros(height, width, CV_8UC3);
-
-    for (size_t i=0; i<selectedBoxs.size(); i+=4)
-    {
-        rectangle(boxImg, Point(selectedBoxs[i], selectedBoxs[i+1]),
-                  Point(selectedBoxs[i+2], selectedBoxs[i+3]), Scalar(255, 0, 255), 2);
-    }
-
-    double F  = (width/2)/tan(hFOV/2.f);
-    double du = panoWidth/2/CV_PI;
-    double dv = panoHeight/CV_PI;
-
-    Mat tmpCoor = Mat::zeros(3, 1, CV_64F);
-    Mat warpMap = cv::Mat(panoHeight, panoWidth, CV_32FC2);
-
-    for(int j = 0; j < panoHeight; j++)
-    {
-        for(int i = 0; i < panoWidth; i++)
-        {
-            double latitude  = (panoHeight/2 - j)/dv;
-            double longitude = (i - panoWidth/2)/du;
-
-            tmpCoor.at<double>(0) = cos(latitude)*sin(longitude);
-            tmpCoor.at<double>(1) = sin(latitude);
-            tmpCoor.at<double>(2) = cos(latitude)*cos(longitude);
-
-            tmpCoor = rotatMat.inv()*tmpCoor;
-
-            if (tmpCoor.at<double>(2) < DBL_EPSILON)
-            {
-                warpMap.at<Point2f>(j, i) = Point2f(-1.f, -1.f);
-            }
-            else
-            {
-                float u = tmpCoor.at<double>(0)*F/tmpCoor.at<double>(2);
-                float v = tmpCoor.at<double>(1)*F/tmpCoor.at<double>(2);
-
-                warpMap.at<Point2f>(j, i) = Point2f(u+width/2, height/2-v);
-            }
-        }
-    }
-
-    cv::Mat dstPanoBox;
-    dstPanoBox = cv::Mat(panoHeight, panoWidth, CV_8UC3, cv::Scalar(1, 1, 1));
-    remap(boxImg, dstPanoBox, warpMap, cv::Mat(), CV_INTER_CUBIC);
-    //addWeighted(dstPanoBox, 0.5, panoImg, 0.4, 0.0, panoImg);
-    add(dstPanoBox, panoImg, panoImg);
-
-    return 0;
+  int width = size[0];
+  int height = size[1];
+  size_t index = 0;
+  cv::Mat dst;
+  while(index < rotatMats.size()){
+    PanoImg2Warp(srcPanoImg, dst, rotatMats[index++], hFOV, width, height);
+    warpImgList.push_back(dst);
+  }
 }
 
-int convertWarpCoord2Pano(cv::Mat& panoImg, std::vector<std::vector<float> >& detections, std::vector<double>& param, int warpWidth, int warpHeight, float confidence_threshold)
+std::vector<cv::Mat> convertRotatMat2Inv(std::vector<cv::Mat> rotatMats)
 {
-  cv::Mat result;
-  std::vector<double> boxes;
+  std::vector<cv::Mat> rotatMatsInv;
+  for(size_t i = 0; i < rotatMats.size(); i++)
+  {
+    rotatMatsInv.push_back(rotatMats[i].inv());
+  }
+  return rotatMatsInv;
+}
+
+std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<int> size, double F, double du, double dv, cv::Mat& rotatMat)
+{
+  int warpWidth = size[0];
+  int warpHeight = size[1];
+  int panoWidth = size[2];
+  int panoHeight = size[3];
+  Mat tmpCoor = Mat::zeros(3, 1, CV_64F);
+
+  tmpCoor.at<double>(0) = static_cast<double>(rows - warpWidth/2);
+  tmpCoor.at<double>(1) = static_cast<double>(warpHeight/2 - cols);
+  tmpCoor.at<double>(2) = F;
+
+  tmpCoor = rotatMat*tmpCoor;
+  normalize(tmpCoor, tmpCoor);
+
+  double latitude  = asin(tmpCoor.at<double>(1));
+  double longitude = atan2(tmpCoor.at<double>(0), tmpCoor.at<double>(2));
+
+  double pCols = longitude*du + panoWidth/2;
+  double pRows = panoHeight/2 - latitude*dv;
+  std::pair<double, double> coord = std::make_pair(pRows, pCols);
+  //std::pair<double, double> coord = std::make_pair(pCols, pRows);
+
+  return coord;
+}
+
+
+bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, std::vector<std::vector<float> >& detections,
+		const std::vector<int> size, float confidence_threshold, cv::Mat& rotatMat, double hFOV)
+{
+  int warpWidth = size[0];
+  int warpHeight = size[1];
+  int panoWidth = size[2];
+  int panoHeight = size[3];
+  double F  = (warpWidth/2)/tan(hFOV/2.f);
+  double du = panoWidth/2/CV_PI;
+  double dv = panoHeight/CV_PI;
   for(size_t i = 0; i < detections.size(); ++i){
     const vector<float>& detection = detections[i];  
     const float score = detection[2]; 
     if (score >= confidence_threshold){
-      boxes.push_back(static_cast<double>(detection[3] * warpWidth)); 
-      boxes.push_back(static_cast<double>(detection[4] * warpHeight)); 
-      boxes.push_back(static_cast<double>(detection[5] * warpWidth)); 
-      boxes.push_back(static_cast<double>(detection[6] * warpHeight)); 
+      double xmin = static_cast<double>(detection[3] * warpWidth);
+      double ymin = static_cast<double>(detection[4] * warpHeight); 
+      double xmax = static_cast<double>(detection[5] * warpWidth); 
+      double ymax = static_cast<double>(detection[6] * warpHeight); 
+      //[xmin, ymin, xmax, ymax]
+      for(double rows = xmin; rows < xmax; rows += 1){
+        double cols = ymin;
+        std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotatMat);
+        boxesCoord.push_back(coord1);
+
+        cols = ymax;
+        std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotatMat);
+        boxesCoord.push_back(coord2);
+      }
+      for(double cols = ymin; cols < ymax; cols += 1){
+        double rows = xmin;
+        std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotatMat);
+        boxesCoord.push_back(coord1);
+
+        rows = xmax;
+        std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotatMat);
+        boxesCoord.push_back(coord2);
+      }
     }
   }
-  BoxesWarp(boxes, warpWidth, warpHeight, param[0], param[1], param[2], param[3], panoImg);
-  return 0;
+  return true;
 }
 
-void MakeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<double>& params, int width, int height)
+bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> > boxesCoords)
 {
-  size_t index = 0;
-  std::string s;
-  cv::Mat dst;
-  while(index < params.size()){
-    PanoImg2Warp(srcPanoImg, dst, width, height, params[index], params[index+1], params[index+2], params[index+3]);
-    warpImgList.push_back(dst);
-    index += 4;
+  std::cout << "size is " << boxesCoords.size() << std::endl;
+  for(int index = 0; index < boxesCoords.size(); index++)
+  {
+    int row = static_cast<int>(boxesCoords[index].first);
+    int col = static_cast<int>(boxesCoords[index].second);
+    cv::Point point;
+    point.x = col;
+    point.y = row;
+    cv::circle(panoImg, point, 1, cv::Scalar(0,0,255));
   }
+
+  return true;
 }

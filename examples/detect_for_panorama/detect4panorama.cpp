@@ -25,6 +25,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <sys/time.h>
 
 #include "caffe/util/panorama_util.hpp"
 
@@ -282,68 +283,81 @@ int main(int argc, char** argv) {
   std::ostream out(buf);
 
   //make the stored vector
-  std::vector<cv::Mat> warpImgs;
 
   // Process image one by one.
-  double width = 300.0;
-  double height = 300.0;
+  int warpWidth = 300;
+  int warpHeight = 300;
+  int panoWidth = 3840;
+  int panoHeight = 1920;
+  int s[] = {warpWidth, warpHeight, panoWidth, panoHeight};
+  std::vector<int> size(s, s+4);
   std::vector<double> params;
   //const double angle_47 = 47*CV_PI/180;
   const double angle_45 = 45*CV_PI/180;
   const double angle_68 = 68*CV_PI/180;
   const double hFOV = 47*CV_PI/180;
+  const double roll = 0.0;
+
+  /*准备每个视图的yaw, pitch, roll参数*/
   for(double pitch = -angle_68; pitch < angle_68; pitch += angle_45)
   {
     for(double yaw = 0; yaw < 2*CV_PI - 0.1; yaw += angle_45)
     {
-      //[hFOV, yaw, pitch, roll]
-      params.push_back(hFOV);
+      //[yaw, pitch, roll]
       params.push_back(yaw);
       params.push_back(pitch);
-      params.push_back(0);
+      params.push_back(roll);
     }
   }
 
   //for top view
-  params.push_back(hFOV);
-  params.push_back(0);
-  params.push_back(angle_68+angle_45);
-  params.push_back(0);
-  //for bottom view
-  params.push_back(hFOV);
-  params.push_back(0);
-  params.push_back(-(angle_68+angle_45));
-  params.push_back(0);
+  params.push_back(0.0);
+  params.push_back(CV_PI);
+  params.push_back(roll);
+  ////for bottom view
+  params.push_back(0.0);
+  params.push_back(-CV_PI/2);
+  params.push_back(roll);
+
+  std::vector<cv::Mat> rotaMats = makeRotatMatList(params);
+  std::vector<cv::Mat> rotaMatsInv = convertRotatMat2Inv(rotaMats);
 
   std::ifstream infile(argv[3]);
   std::string file;
   std::vector<std::vector<float> > detections;
+  std::vector<cv::Mat> warpImgs;
+
+  struct timeval start;
+  struct timeval end;
+  unsigned long timer;
+  gettimeofday(&start,NULL);
+
   while(infile >> file){
+    cv::Mat img = cv::imread(file, -1);
+    CHECK(!img.empty()) << "Unable to decode image " << file;
+    makeWarpImgList(img, warpImgs, rotaMats, size, hFOV);
     if(flag == "full"){
-      cv::Mat img = cv::imread(file, -1);
-      CHECK(!img.empty()) << "Unable to decode image " << file;
-      MakeWarpImgList(img, warpImgs, params, width, height);
-      int index = 0;
+      std::vector<std::pair<double, double> > boxesCoords;
       for(int i = 0; i < warpImgs.size(); i++){
         cv::Mat im = warpImgs[i];
-        //std::string str;
-        //std::stringstream ss;
-        //ss << i;
-        //ss >> str;
-        //str = "testImages/" + str + ".jpg";
-        //cv::imwrite(str, im);
+        /*
+        std::string s;
+        std::stringstream ss;
+        ss << i;
+        ss >> s;
+        s = s +".jpg";
+        cv::imwrite(s, im);
+        */
+        cv::Mat rotaMat = rotaMats[i];
         std::vector<std::vector<float> > detections = detector.Detect(im);
         //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
-        //CHECK_EQ(d.size(), 7);
-        std::vector<double> param;
-        for(int j = 0; j < 4; j++){
-          param.push_back(params[index + j]); 
-        }
-        index += 4;
-        convertWarpCoord2Pano(img, detections, param, width, height, confidence_threshold);
-        param.clear();
+
+        convertWarpCoord2Pano(boxesCoords, detections, size,
+            confidence_threshold, rotaMat, hFOV);
       }
-      cv::imwrite("output.jpg", img);
+      drawCoordInPanoImg(img, boxesCoords);
+      cv::imwrite("out.jpg", img);
+
     } else if(flag == "part"){
       cv::Mat img = cv::imread(file, -1);
       CHECK(!img.empty()) << "Unable to decode image " << file;
@@ -370,6 +384,9 @@ int main(int argc, char** argv) {
       return 0;
     }
   }
+  gettimeofday(&end,NULL);
+  timer = 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
+  std::cout << timer/1000 << std::endl;
   return 0;
 }
 #else
