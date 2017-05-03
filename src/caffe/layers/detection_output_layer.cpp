@@ -324,7 +324,7 @@ void DetectionOutputLayer<Dtype>::Forward_cpu(
       }
       for (int j = 0; j < indices.size(); ++j) {
         int idx = indices[j];
-        top_data[count * 7] = i;
+        top_data[count * 7] = j;
         top_data[count * 7 + 1] = label;
         top_data[count * 7 + 2] = scores[idx];
         const NormalizedBBox& bbox = bboxes[idx];

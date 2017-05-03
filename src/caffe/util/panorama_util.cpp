@@ -1,22 +1,118 @@
-#include <caffe/caffe.hpp>
-#include "opencv2/opencv.hpp"
 #include "caffe/util/panorama_util.hpp"
 
-#include <algorithm>
-#include <iomanip>
-#include <iosfwd>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
+#define maxn 510  
+const double eps=1E-8;  
                       
-using namespace cv;
-using namespace std;
+
+/* 
+    类型：多边形相交面积模板 
+*/  
+int sig(double d){  
+  return(d>eps)-(d<-eps);
+}  
+
+double cross(Point o,Point a,Point b){  
+  return(a.x-o.x)*(b.y-o.y)-(b.x-o.x)*(a.y-o.y);  
+}  
+
+double area(Point* ps,int n){  
+  ps[n]=ps[0];  
+  double res=0;  
+  for(int i=0;i<n;i++){  
+      res+=ps[i].x*ps[i+1].y-ps[i].y*ps[i+1].x;  
+  }  
+  return res/2.0;  
+}  
+
+int lineCross(Point a,Point b,Point c,Point d,Point&p){  
+  double s1,s2;  
+  s1=cross(a,b,c);  
+  s2=cross(a,b,d);  
+  if(sig(s1)==0&&sig(s2)==0) return 2;  
+  if(sig(s2-s1)==0) return 0;  
+  p.x=(c.x*s2-d.x*s1)/(s2-s1);  
+  p.y=(c.y*s2-d.y*s1)/(s2-s1);  
+  return 1;  
+}  
+
+//多边形切割  
+//用直线ab切割多边形p，切割后的在向量(a,b)的左侧，并原地保存切割结果  
+//如果退化为一个点，也会返回去,此时n为1  
+void polygon_cut(Point*p,int&n,Point a,Point b){  
+  static Point pp[maxn];  
+  int m=0;p[n]=p[0];  
+  for(int i=0;i<n;i++){  
+      if(sig(cross(a,b,p[i]))>0) pp[m++]=p[i];  
+      if(sig(cross(a,b,p[i]))!=sig(cross(a,b,p[i+1])))  
+          lineCross(a,b,p[i],p[i+1],pp[m++]);  
+  }  
+  n=0;  
+  for(int i=0;i<m;i++)  
+      if(!i||!(pp[i]==pp[i-1]))  
+          p[n++]=pp[i];  
+  while(n>1&&p[n-1]==p[0])n--;  
+}  
+
+//---------------华丽的分隔线-----------------//  
+//返回三角形oab和三角形ocd的有向交面积,o是原点//  
+double intersectArea(Point a,Point b,Point c,Point d){  
+  Point o(0,0);  
+  int s1=sig(cross(o,a,b));  
+  int s2=sig(cross(o,c,d));  
+  if(s1==0||s2==0)return 0.0;//退化，面积为0  
+  if(s1==-1) std::swap(a,b);  
+  if(s2==-1) std::swap(c,d);  
+  Point p[10]={o,a,b};  
+  int n=3;  
+  polygon_cut(p,n,o,c);  
+  polygon_cut(p,n,c,d);  
+  polygon_cut(p,n,d,o);  
+  double res=fabs(area(p,n));  
+  if(s1*s2==-1) res=-res;return res;  
+}  
+
+//求两多边形的交面积  
+double intersectArea(Point*ps1, int n1, Point*ps2, int n2){  
+  if(area(ps1,n1)<0) std::reverse(ps1,ps1+n1);
+  if(area(ps2,n2)<0) std::reverse(ps2,ps2+n2);
+  ps1[n1]=ps1[0];
+  ps2[n2]=ps2[0];
+  double res=0;
+  for(int i=0;i<n1;i++){
+    for(int j=0;j<n2;j++){
+      //std::cout << ps1[i].x << " " << ps1[i+1].x << " " 
+      //  << ps2[j].x << " " << ps2[j+1].x << std::endl;
+      //std::cout << ps1[i].y << " " << ps1[i+1].y << " " 
+      //  << ps2[j].y << " " << ps2[j+1].y << std::endl;
+      //std::cout << std::endl;
+      res += intersectArea(ps1[i],ps1[i+1],ps2[j],ps2[j+1]);  
+      //std::cout << "res is " << res << std::endl;
+      //std::cout << std::endl;
+    }  
+  }
+  return res;//assumeresispositive!  
+}
+
+//hdu-3060求两个任意简单多边形的并面积  
+//Point ps1[maxn],ps2[maxn];  
+//int main(){  
+//    int n1=4,n2=4;  
+//    for(int i=0;i<n1;i++)  
+//        scanf("%lf%lf",&ps1[i].x,&ps1[i].y);  
+//    for(int i=0;i<n2;i++)  
+//        scanf("%lf%lf",&ps2[i].x,&ps2[i].y);  
+//    double ans=intersectArea(ps1,n1,ps2,n2);  
+//    ans=fabs(area(ps1,n1))+fabs(area(ps2,n2))-ans;//容斥  
+//    printf("%.2f\n",ans);  
+//    
+//    return 0;  
+//}  
+
 
 cv::Mat computeRotaMat(double yaw, double pitch, double roll)
 {
   cv::Mat rotaMat;
-  Mat rotaMatPitch = cv::Mat(3, 3, CV_64F);
+  cv::Mat rotaMatPitch = cv::Mat(3, 3, CV_64F);
   rotaMatPitch.at<double>(0, 0) = 1;
   rotaMatPitch.at<double>(0, 1) = 0;
   rotaMatPitch.at<double>(0, 2) = 0;
@@ -27,7 +123,7 @@ cv::Mat computeRotaMat(double yaw, double pitch, double roll)
   rotaMatPitch.at<double>(2, 1) = sin(-pitch);
   rotaMatPitch.at<double>(2, 2) = cos(-pitch);
 
-  Mat rotaMatYaw = cv::Mat(3, 3, CV_64F);
+  cv::Mat rotaMatYaw = cv::Mat(3, 3, CV_64F);
   rotaMatYaw.at<double>(0, 0) = cos(yaw);
   rotaMatYaw.at<double>(0, 1) = 0;
   rotaMatYaw.at<double>(0, 2) = sin(yaw);
@@ -38,7 +134,7 @@ cv::Mat computeRotaMat(double yaw, double pitch, double roll)
   rotaMatYaw.at<double>(2, 1) = 0;
   rotaMatYaw.at<double>(2, 2) = cos(yaw);
 
-  Mat rotaMatRoll = cv::Mat(3, 3, CV_64F);
+  cv::Mat rotaMatRoll = cv::Mat(3, 3, CV_64F);
   rotaMatRoll.at<double>(0, 0) = cos(roll);
   rotaMatRoll.at<double>(0, 1) = -sin(roll);
   rotaMatRoll.at<double>(0, 2) = 0;
@@ -60,14 +156,14 @@ std::vector<cv::Mat> makeRotaMatList(std::vector<double>& params)
   std::vector<cv::Mat> rotaMats;
   for(size_t i = 0; i < params.size(); i += 3)
   {
-	cv::Mat rotaMat = computeRotaMat(params[i], params[i+1], params[i+2]);
+	  cv::Mat rotaMat = computeRotaMat(params[i], params[i+1], params[i+2]);
     rotaMats.push_back(rotaMat);
   }
   return rotaMats;
 }
 
 
-int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, double hFOV, int width, int height)
+int panoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, double hFOV, int width, int height)
 {
   int srcWidth  = srcPanoImg.cols;
   int srcHeight = srcPanoImg.rows;
@@ -86,8 +182,8 @@ int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, dou
   double du = srcWidth/2/CV_PI;
   double dv = srcHeight/CV_PI;
 
-  Mat tmpCoor = Mat::zeros(3, 1, CV_64F);
-  Mat warpMap = cv::Mat(height, width, CV_32FC2);
+  cv::Mat tmpCoor = cv::Mat::zeros(3, 1, CV_64F);
+  cv::Mat warpMap = cv::Mat(height, width, CV_32FC2);
 
   for(int j = 0; j < height; j++)
   {
@@ -106,12 +202,12 @@ int PanoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, dou
       float u = longitude*du + srcWidth/2;
       float v = srcHeight/2 - latitude*dv;
 
-      warpMap.at<Point2f>(j, i) = Point2f(u, v);
+      warpMap.at<cv::Point2f>(j, i) = cv::Point2f(u, v);
     }
   }
 
   dstWarpImg = cv::Mat(height, width, CV_8UC3, cv::Scalar(0, 0, 0));
-  remap(srcPanoImg, dstWarpImg, warpMap, cv::Mat(), CV_INTER_CUBIC, BORDER_WRAP);
+  remap(srcPanoImg, dstWarpImg, warpMap, cv::Mat(), CV_INTER_CUBIC, cv::BORDER_WRAP);
 
   return 0;
 }
@@ -123,7 +219,7 @@ void makeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std
   size_t index = 0;
   cv::Mat dst;
   while(index < rotaMats.size()){
-    PanoImg2Warp(srcPanoImg, dst, rotaMats[index++], hFOV, width, height);
+    panoImg2Warp(srcPanoImg, dst, rotaMats[index++], hFOV, width, height);
     warpImgList.push_back(dst);
   }
 }
@@ -144,7 +240,7 @@ std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<in
   int warpHeight = size[1];
   int panoWidth = size[2];
   int panoHeight = size[3];
-  Mat tmpCoor = Mat::zeros(3, 1, CV_64F);
+  cv::Mat tmpCoor = cv::Mat::zeros(3, 1, CV_64F);
 
   tmpCoor.at<double>(0) = static_cast<double>(rows - warpWidth/2);
   tmpCoor.at<double>(1) = static_cast<double>(warpHeight/2 - cols);
@@ -158,6 +254,7 @@ std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<in
 
   double pCols = longitude*du + panoWidth/2;
   double pRows = panoHeight/2 - latitude*dv;
+  //std::cout << pRows << "    " << pCols << std::endl;
   std::pair<double, double> coord = std::make_pair(pRows, pCols);
   //std::pair<double, double> coord = std::make_pair(pCols, pRows);
 
@@ -176,7 +273,7 @@ bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, 
   double du = panoWidth/2/CV_PI;
   double dv = panoHeight/CV_PI;
   for(size_t i = 0; i < detections.size(); ++i){
-    const vector<float>& detection = detections[i];  
+    const std::vector<float>& detection = detections[i];  
     const float score = detection[2]; 
     if (score >= confidence_threshold){
       double xmin = static_cast<double>(detection[3] * warpWidth);
@@ -188,17 +285,22 @@ bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, 
         double cols = ymin;
         std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord1);
+      }
 
-        cols = ymax;
+      for(double rows = xmin; rows < xmax; rows += 1){
+        double cols = ymax;
         std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord2);
       }
+
       for(double cols = ymin; cols < ymax; cols += 1){
         double rows = xmin;
         std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord1);
+      }
 
-        rows = xmax;
+      for(double cols = ymin; cols < ymax; cols += 1){
+        double rows = xmax;
         std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord2);
       }
@@ -207,9 +309,54 @@ bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, 
   return true;
 }
 
+bool convertWarpCoord2Pano2(std::vector<std::pair<double, double> >& boxesCoord, std::vector<std::vector<float> >& detections, std::vector<int>& filtedIndexs, int& current, const std::vector<int> size, cv::Mat& rotaMat, double hFOV)
+{
+  int warpWidth = size[0];
+  int warpHeight = size[1];
+  int panoWidth = size[2];
+  int panoHeight = size[3];
+  double F  = (warpWidth/2)/tan(hFOV/2.f);
+  double du = panoWidth/2/CV_PI;
+  double dv = panoHeight/CV_PI;
+  for(size_t i = 0; i < detections.size(); ++i){
+    const std::vector<float> detection = detections[i];  
+    int index = static_cast<int>(detection[0]);
+    int currentInx = filtedIndexs[current];
+    int num = 0;
+    if (currentInx == index){
+      current++;
+      double xmin = static_cast<double>(detection[3] * warpWidth);
+      double ymin = static_cast<double>(detection[4] * warpHeight); 
+      double xmax = static_cast<double>(detection[5] * warpWidth); 
+      double ymax = static_cast<double>(detection[6] * warpHeight); 
+      //[xmin, ymin, xmax, ymax]
+      std::pair<double, double> coord;
+      for(double rows = xmin; rows < xmax; rows += 1){
+        double cols = ymin;
+        coord = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
+        boxesCoord.push_back(coord);
+
+        cols = ymax;
+        coord = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
+        boxesCoord.push_back(coord);
+        num++;
+      }
+      for(double cols = ymin; cols < ymax; cols += 1){
+        double rows = xmin;
+        coord= map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
+        boxesCoord.push_back(coord);
+
+        rows = xmax;
+        coord= map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
+        boxesCoord.push_back(coord);
+      }
+    }
+  }
+  return true;
+}
+
 bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> > boxesCoords)
 {
-  std::cout << "size is " << boxesCoords.size() << std::endl;
   for(size_t index = 0; index < boxesCoords.size(); index++)
   {
     int row = static_cast<int>(boxesCoords[index].first);
@@ -222,6 +369,22 @@ bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> 
 
   return true;
 }
+
+//bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::vector<float> > boxesCoords)
+//{
+//  for(size_t index = 0; index < boxesCoords.size(); index++)
+//  {
+//    std::vector<float> detection = boxesCoords[index];
+//    int row = static_cast<int>(detection[);
+//    int col = static_cast<int>(boxesCoords[index].second);
+//    cv::Point point;
+//    point.x = col;
+//    point.y = row;
+//    cv::circle(panoImg, point, 1, cv::Scalar(0,0,255));
+//  }
+//
+//  return true;
+//}
 
 bool fixPointRange(int& x, int& y, int width, int height)
 {
@@ -243,7 +406,7 @@ bool drawCoordInWarpImg(cv::Mat& warpImg, std::vector<std::vector<float> >& dete
   //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
   for(size_t i = 0; i < detections.size(); ++i)
   {
-    const vector<float>& detection = detections[i];  
+    const std::vector<float>& detection = detections[i];  
     const float score = detection[2]; 
     if (score >= confidence_threshold)
     {
@@ -253,11 +416,246 @@ bool drawCoordInWarpImg(cv::Mat& warpImg, std::vector<std::vector<float> >& dete
       int ymax = static_cast<double>(detection[6] * warpImg.rows); 
       fixPointRange(xmin, ymin, warpImg.cols, warpImg.rows);
       fixPointRange(xmax, ymax, warpImg.cols, warpImg.rows);
-      std::cout << detection[3] << " " << detection[4] << " " << detection[5] << " " << detection[6] << std::endl;
-      std::cout << xmin << " " << ymin << " " << xmax << " " << ymax << std::endl;
       cv::rectangle(warpImg, cv::Point(xmin, ymin), cv::Point(xmax, ymax), cv::Scalar(255, 0, 255), 2);
     }
   }
   return true;
 }
 
+
+//bool map2OtherView(std::vector<std::vector<float > >&mapCoords, std::vector<std::vector<float> >& coords, std::vector<cv::Mat>& rotaMats, int srcNum, int dstNum, float confidence_threshold, std::vector<int> size, double hFOV, double angleOffset)
+//{
+//  int num = 0;
+//  for(size_t k = 0; k < coords.size(); k++)
+//  {
+//    const vector<float>& coord = coords[k];
+//    float score = coord[2];
+//    if(score > confidence_threshold){
+//      num++;
+//    }
+//  }
+//  if(!num)
+//  {
+//    return false;
+//  }
+//
+//  double F  = (size[0]/2)/tan(hFOV/2.f);
+//  for(int i = 0; i < coords.size(); i++)
+//  {
+//    vector<float> coord = coords[i];
+//    vector<float> tmp(coord);
+//    float score = coord[2];
+//    if(score > confidence_threshold)
+//    {
+//      //flip(tmp, size);
+//      for(int j = 3; j < coord.size(); j+=2)
+//      {
+//        cv::Mat tmpCoor = Mat::zeros(3, 1, CV_64F);
+//        //std::cout << "coord" << j << " is " << tmp[j] << std::endl;
+//        //std::cout << "coord" << j+1 << " is " << tmp[j+1] << std::endl;
+//        tmpCoor.at<double>(0) = static_cast<double>(tmp[j]*size[0] - size[0]/2);
+//        tmpCoor.at<double>(1) = static_cast<double>(size[1]/2 - tmp[j+1]*size[1]);
+//        tmpCoor.at<double>(2) = F;
+//        std::cout << "coord" << j << " is " << tmpCoor.at<double>(0) << std::endl;
+//        std::cout << "coord" << j+1 << " is " << tmpCoor.at<double>(1) << std::endl;
+//        tmpCoor = rotaMats[dstNum]*rotaMats[srcNum].inv()*tmpCoor;
+//        tmp[0] = tmpCoor.at<float>(0) + size[0]/2;
+//        tmp[1] = size[1]/2 - tmpCoor.at<float>(1);
+//        //std::cout << "tmp" << j << " is " << tmp[0] << std::endl;
+//        //std::cout << "tmp" << j+1 << " is " << tmp[1] << std::endl;
+//      }
+//      tmp.push_back(i);
+//      mapCoords.push_back(tmp);
+//    }
+//  }
+//  return true;
+//}
+//
+//float computCrossArea(std::vector<float>& mapCoord1, std::vector<float>& mapCoord2)
+//{
+//  float area = 0;
+//  return area;
+//}
+//
+//bool applyNMS(std::vector<std::vector<float> >& mapCoords, std::vector<std::vector<float> >& detections)
+//{
+//  float area_threshold = 0.5;
+//  for(size_t i = 0; i < mapCoords.size(); i++)
+//  {
+//    for(size_t j = i; j < mapCoords.size(); j++)
+//    {
+//      if(computCrossArea(mapCoords[i], mapCoords[j]) > area_threshold)
+//      {
+//        if(mapCoords[i][2] > mapCoords[j][2])
+//        {
+//          //to do: remove j by index
+//          ;
+//        }
+//      }
+//    }
+//  }
+//  return true;
+//}
+//
+//bool applyNMS4Detections(std::vector<std::vector<std::vector<float> > >& allDetections, std::vector<int> size, float confidence_threshold, std::vector<cv::Mat >& rotaMats, double hFOV, double angleOffset)
+//{
+//  for(int i = 0; i < allDetections.size(); i++)
+//  {
+//    std::vector<std::vector<float> > mapCoords;
+//    if(i==0)
+//    //if((i>=0) && (i<=7))
+//    {
+//      map2OtherView(mapCoords, allDetections[i+1], rotaMats, i+1, i, confidence_threshold, size, hFOV, angleOffset);
+//      //applyNMS(mapCoords, allDetections[i+1]);
+//      //map2OtherView(mapCoords, allDetections[i+8], rotaMats, i+8, i, confidence_threshold, size, hFOV);
+//      //applyNMS(allDetections[i+8], mapCoords);
+//      //map2OtherView(mapCoords, allDetections[i+9], rotaMats, i+9, i, confidence_threshold, size, hFOV);
+//      //applyNMS(allDetections[i+9], mapCoords);
+//      //map2OtherView(mapCoords, allDetections[24], rotaMats, 24, i, confidence_threshold, size, hFOV);
+//      //applyNMS(allDetections[24], mapCoords);
+//    //} else if((i>=8) && (i<=15)) {
+//      //map2OtherView(mapCoords, allDetections[i-8], rotaMats, i-8, i, confidence_threshold, size, hFOV);
+//      //map2OtherView(mapCoords, allDetections[i-7], rotaMats, i-7, i, confidence_threshold, size, hFOV);
+//      //map2OtherView(mapCoords, allDetections[i+1], rotaMats, i+1, i, confidence_threshold, size, hFOV);
+//      //map2OtherView(mapCoords, allDetections[i+8], rotaMats, i+8, i, confidence_threshold, size, hFOV);
+//      //map2OtherView(mapCoords, allDetections[i+9], rotaMats, i+9, i, confidence_threshold, size, hFOV);
+//      //applyNMS(allDetections[i], mapCoords);
+//
+//    //} else if((i>=16) && (i<=23)) {
+//    //  map2OtherView(mapCoords, allDetections[i+1], rotaMats, i+1, i, confidence_threshold, hFOV);
+//    //  map2OtherView(mapCoords, allDetections[i+8], rotaMats, i+8, i, confidence_threshold, hFOV);
+//    //  map2OtherView(mapCoords, allDetections[i+9], rotaMats, i+9, i, confidence_threshold, hFOV);
+//    //  map2OtherView(mapCoords, allDetections[25], rotaMats, 25, i, confidence_threshold, hFOV);
+//    //  applyNMS(allDetections[i], mapCoords);
+//    }
+//  }
+//  return true;
+//}
+//
+
+bool setCoord(std::vector<float>& d, Point* p)
+{
+  float xmin = d[3];
+  float ymin = d[4];
+  float xmax = d[5];
+  float ymax = d[6];
+  p[0].x = static_cast<double>(xmin);
+  p[0].y = static_cast<double>(ymin);
+  p[1].x = static_cast<double>(xmax);
+  p[1].y = static_cast<double>(ymin);
+  p[2].x = static_cast<double>(xmax);
+  p[2].y = static_cast<double>(ymax);
+  p[3].x = static_cast<double>(xmin);
+  p[3].y = static_cast<double>(ymax);
+
+  return true;
+}
+
+float computeOverlap(std::vector<float> d1, std::vector<float> d2)
+{
+  Point ps1[100], ps2[100];
+  setCoord(d1, ps1);
+  setCoord(d2, ps2);
+  //ps1[0].x = -1;
+  //ps1[0].y = 1;
+  //ps1[1].x = 0;
+  //ps1[1].y = 0;
+  //ps1[2].x = 1;
+  //ps1[2].y = 1;
+  //ps1[3].x = 0;
+  //ps1[3].y = 2;
+
+  //ps2[0].x = 0;
+  //ps2[0].y = 0;
+  //ps2[1].x = 2;
+  //ps2[1].y = 0;
+  //ps2[2].x = 2;
+  //ps2[2].y = 2;
+  //ps2[3].x = 0;
+  //ps2[3].y = 2;
+
+  std::cout << ps1[0].x << " " << ps1[1].x << " " 
+    << ps2[0].x << " " << ps2[1].x << std::endl;
+  std::cout << ps1[0].y << " " << ps1[1].y << " " 
+    << ps2[0].y << " " << ps2[1].y << std::endl;
+  std::cout << std::endl;
+  double interArea = intersectArea(ps1, 4, ps2, 4);
+  double unionArea = fabs(area(ps1, 4)) + fabs(area(ps2, 4)) - interArea;
+  std::cout << interArea << " area " << unionArea << std::endl;
+
+  return interArea/unionArea;
+}
+
+bool compareFunc(std::vector<float> a, std::vector<float> b)
+{
+  return a[2] > b[2];
+}
+
+bool applyNMS(std::vector<std::vector<float> >& mapDetections, std::vector<int>& filtedIndexs)
+{
+  sort(mapDetections.begin(), mapDetections.end(), compareFunc);
+  for(int i = 0; i < mapDetections.size(); i++)
+  {
+    for(int j = mapDetections.size()-1; j > i; j--)
+    {
+      float th = computeOverlap(mapDetections[i], mapDetections[j]);
+      std::cout << th << std::endl;
+      //if(computeOverlap(mapDetections[i], mapDetections[j]) > 0.5)
+      if(th > 0.5)
+      {
+        mapDetections.erase(mapDetections.begin() + j -1);
+      }
+    }
+  }
+  for(int i = 0; i < mapDetections.size(); i++)
+  {
+    std::vector<float> d = mapDetections[i];
+    filtedIndexs.push_back(d[0]);
+  }
+
+  return true;
+}
+
+bool applyNMS4Detections(std::vector<std::vector<std::vector<float> > >& allDetections, std::vector<int>& filtedIndexs, std::vector<int> size, float confidence_threshold, std::vector<cv::Mat> rotaMats, double hFOV)
+{
+  int warpWidth = size[0];
+  int warpHeight = size[1];
+  int panoWidth = size[2];
+  int panoHeight = size[3];
+  double F  = (warpWidth/2)/tan(hFOV/2.f);
+  double du = panoWidth/2/CV_PI;
+  double dv = panoHeight/CV_PI;
+  static std::vector<std::vector<float> > mapDetections;
+  for(int j = 0; j < allDetections.size(); j++)
+  {
+    std::vector<std::vector<float> > detections = allDetections[j];
+    cv::Mat rotaMat = rotaMats[j];
+    for(size_t i = 0; i < detections.size(); ++i)
+    {
+      const std::vector<float> detection = detections[i];  
+      const float score = detection[2];
+      std::vector<float> mapDetection;
+      if (score >= confidence_threshold){
+        for(int k = 0; k < detection.size(); k++)
+        {
+          if(k < 3)
+          {
+            mapDetection.push_back(detection[k]);
+          } else {
+            double x = static_cast<double>(detection[k++] * warpWidth);
+            double y = static_cast<double>(detection[k] * warpHeight); 
+            std::pair<double, double> coord = map2PanoCoord(x, y, size, F, du, dv, rotaMat);
+            mapDetection.push_back(coord.first);
+            mapDetection.push_back(coord.second);
+          }
+        }
+        mapDetections.push_back(mapDetection);
+      }
+    }
+  }
+  applyNMS(mapDetections, filtedIndexs);
+  sort(filtedIndexs.begin(), filtedIndexs.end());
+  mapDetections.clear();
+
+  return true;
+}

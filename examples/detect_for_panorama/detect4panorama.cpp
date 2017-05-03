@@ -294,14 +294,14 @@ int main(int argc, char** argv) {
   std::vector<double> params;
   //const double angle_47 = 47*CV_PI/180;
   const double angle_45 = 45*CV_PI/180;
-  const double angle_68 = 68*CV_PI/180;
-  const double hFOV = 47*CV_PI/180;
+  const double hFOV = 50*CV_PI/180;
   const double roll = 0.0;
+  const double angleOffset = 45*CV_PI/180;
 
   /*准备每个视图的yaw, pitch, roll参数*/
-  for(double pitch = -angle_68; pitch < angle_68; pitch += angle_45)
+  for(double pitch = -angle_45; pitch < angle_45+0.01; pitch += angle_45)
   {
-    for(double yaw = 0; yaw < 2*CV_PI - 0.1; yaw += angle_45)
+    for(double yaw = 0; yaw < 2*CV_PI; yaw += angle_45)
     {
       //[yaw, pitch, roll]
       params.push_back(yaw);
@@ -314,7 +314,7 @@ int main(int argc, char** argv) {
   params.push_back(0.0);
   params.push_back(CV_PI);
   params.push_back(roll);
-  ////for bottom view
+  //for bottom view
   params.push_back(0.0);
   params.push_back(-CV_PI/2);
   params.push_back(roll);
@@ -336,32 +336,58 @@ int main(int argc, char** argv) {
     cv::Mat img = cv::imread(file, -1);
     CHECK(!img.empty()) << "Unable to decode image " << file;
     makeWarpImgList(img, warpImgs, rotaMats, size, hFOV);
-    std::vector<std::pair<double, double> > boxesCoords;
+    std::vector<std::vector<std::vector<float> > > allDetections;
     for(int i = 0; i < warpImgs.size(); i++){
-      std::cout << "No." << i << std::endl;
       cv::Mat im = warpImgs[i];
       cv::Mat rotaMat = rotaMats[i];
       //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
       std::vector<std::vector<float> > detections = detector.Detect(im);
-      drawCoordInWarpImg(im, detections, confidence_threshold);
-      std::stringstream ss;
-      ss << i;
-      std::string s;
-      ss >> s;
-      s = s + ".jpg";
-      cv::imwrite(s, im);
+      int num_ = 0;
+      for(int j = 0; j < detections.size(); j++)
+      {
+        std::vector<float> d = detections[j];
+        d[0] = num_++;
+      }
+      allDetections.push_back(detections);
 
-      convertWarpCoord2Pano(boxesCoords, detections, size,
-          confidence_threshold, rotaMat, hFOV);
-      //if(i==1){
-      //  break;
-      //}
+      //drawCoordInWarpImg(im, detections, confidence_threshold);
+      //std::stringstream ss;
+      //ss << i;
+      //std::string s;
+      //ss >> s;
+      //s = s + ".jpg";
+      //cv::imwrite(s, im);
+    }
+
+    std::vector<int> filtedIndexs;
+    applyNMS4Detections(allDetections, filtedIndexs, size, confidence_threshold,
+        rotaMats, hFOV);
+
+    //std::vector<std::pair<double, double> > boxesCoords;
+    //for(int j = 0; j < allDetections.size(); j++)
+    //{
+    //  cv::Mat rotaMat = rotaMats[j];
+    //  std::vector<std::vector<float> > detections = allDetections[j];
+    //  convertWarpCoord2Pano(boxesCoords, detections, size,
+    //      confidence_threshold, rotaMat, hFOV);
+    //}
+    //drawCoordInPanoImg(img, boxesCoords);
+    //cv::imwrite("out.jpg", img);
+
+    std::vector<std::pair<double, double> > boxesCoords;
+    int current = 0;
+    for(int j = 0; j < allDetections.size(); j++)
+    {
+      cv::Mat rotaMat = rotaMats[j];
+      std::vector<std::vector<float> > detections = allDetections[j];
+      convertWarpCoord2Pano2(boxesCoords, detections, filtedIndexs, 
+          current, size, rotaMat, hFOV);
     }
     drawCoordInPanoImg(img, boxesCoords);
     cv::imwrite("out.jpg", img);
   }
   gettimeofday(&end,NULL);
-  timer = 1000000 * (end.tv_sec-start.tv_sec)+ end.tv_usec-start.tv_usec;
+  timer = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
   std::cout << timer/1000 << std::endl;
   return 0;
 }

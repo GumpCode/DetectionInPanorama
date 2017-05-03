@@ -127,6 +127,7 @@ void DetectionOutputLayer<Dtype>::Forward_gpu(
 
   int count = 0;
   boost::filesystem::path output_directory(output_directory_);
+  int num_ = 0;
   for (int i = 0; i < num; ++i) {
     const int conf_idx = i * num_classes_ * num_priors_;
     int bbox_idx;
@@ -152,7 +153,7 @@ void DetectionOutputLayer<Dtype>::Forward_gpu(
       }
       for (int j = 0; j < indices.size(); ++j) {
         int idx = indices[j];
-        top_data[count * 7] = i;
+        top_data[count * 7] = num_++;
         top_data[count * 7 + 1] = label;
         top_data[count * 7 + 2] = cur_conf_data[idx];
         for (int k = 0; k < 4; ++k) {
