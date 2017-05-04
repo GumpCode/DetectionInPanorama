@@ -13,15 +13,30 @@
 
 int sig(double d);
 
+int dcmp(double x);
+
 struct Point{  
-    double x,y; Point(){}  
+    double x,y; 
+    Point(){}  
     Point(double x,double y):x(x),y(y){}  
     bool operator==(const Point&p)const{  
         return sig(x-p.x)==0&&sig(y-p.y)==0;  
     }  
 };  
 
+typedef Point Vector;
+
+Vector operator-(Point A, Point B);
+
+double Dot(Vector A, Vector B);
+
+double cross(Vector A, Vector B);
+
 double cross(Point o,Point a,Point b);
+
+bool InSegment(Point P,Point a1,Point a2);
+
+bool SegmentIntersection(Point a1,Point a2,Point b1,Point b2);
 
 double area(Point* ps,int n);
 

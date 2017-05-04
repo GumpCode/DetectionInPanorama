@@ -9,10 +9,48 @@ const double eps=1E-8;
 */  
 int sig(double d){  
   return(d>eps)-(d<-eps);
-}  
+}
+
+int dcmp(double x)
+{
+  if(fabs(x) < eps) return 0;
+  return x < 0 ? -1:1;
+}
+
+Vector operator-(Point A, Point B)
+{
+  return Vector(A.x - B.x, A.y - B.y);
+}
+
+double Dot(Vector A, Vector B)
+{
+  return A.x*B.x + A.y*B.y;
+}
+
+double cross(Vector A, Vector B)
+{
+  return A.x*B.y - A.y*B.x;
+}
 
 double cross(Point o,Point a,Point b){  
   return(a.x-o.x)*(b.y-o.y)-(b.x-o.x)*(a.y-o.y);  
+}
+
+bool InSegment(Point P,Point a1,Point a2)  
+{  
+  return dcmp(cross(a1-P,a2-P))==0 && dcmp(Dot(a1-P,a2-P))<=0;  
+}  
+
+bool SegmentIntersection(Point a1,Point a2,Point b1,Point b2)  
+{  
+  double c1=cross(a2-a1,b1-a1),c2=cross(a2-a1,b2-a1);  
+  double c3=cross(b2-b1,a1-b1),c4=cross(b2-b1,a2-b1);  
+  if(dcmp(c1)*dcmp(c2)<0 && dcmp(c3)*dcmp(c4)<0) return true;  
+  if(dcmp(c1)==0 && InSegment(b1,a1,a2) ) return true;  
+  if(dcmp(c2)==0 && InSegment(b2,a1,a2) ) return true;  
+  if(dcmp(c3)==0 && InSegment(a1,b1,b2) ) return true;  
+  if(dcmp(c4)==0 && InSegment(a2,b1,b2) ) return true;  
+  return false;  
 }  
 
 double area(Point* ps,int n){  
@@ -20,7 +58,7 @@ double area(Point* ps,int n){
   double res=0;  
   for(int i=0;i<n;i++){  
       res+=ps[i].x*ps[i+1].y-ps[i].y*ps[i+1].x;  
-  }  
+  }
   return res/2.0;  
 }  
 
@@ -63,7 +101,7 @@ double intersectArea(Point a,Point b,Point c,Point d){
   if(s1==-1) std::swap(a,b);  
   if(s2==-1) std::swap(c,d);  
   Point p[10]={o,a,b};  
-  int n=3;  
+  int n=3;
   polygon_cut(p,n,o,c);  
   polygon_cut(p,n,c,d);  
   polygon_cut(p,n,d,o);  
@@ -80,34 +118,11 @@ double intersectArea(Point*ps1, int n1, Point*ps2, int n2){
   double res=0;
   for(int i=0;i<n1;i++){
     for(int j=0;j<n2;j++){
-      //std::cout << ps1[i].x << " " << ps1[i+1].x << " " 
-      //  << ps2[j].x << " " << ps2[j+1].x << std::endl;
-      //std::cout << ps1[i].y << " " << ps1[i+1].y << " " 
-      //  << ps2[j].y << " " << ps2[j+1].y << std::endl;
-      //std::cout << std::endl;
       res += intersectArea(ps1[i],ps1[i+1],ps2[j],ps2[j+1]);  
-      //std::cout << "res is " << res << std::endl;
-      //std::cout << std::endl;
     }  
   }
   return res;//assumeresispositive!  
 }
-
-//hdu-3060求两个任意简单多边形的并面积  
-//Point ps1[maxn],ps2[maxn];  
-//int main(){  
-//    int n1=4,n2=4;  
-//    for(int i=0;i<n1;i++)  
-//        scanf("%lf%lf",&ps1[i].x,&ps1[i].y);  
-//    for(int i=0;i<n2;i++)  
-//        scanf("%lf%lf",&ps2[i].x,&ps2[i].y);  
-//    double ans=intersectArea(ps1,n1,ps2,n2);  
-//    ans=fabs(area(ps1,n1))+fabs(area(ps2,n2))-ans;//容斥  
-//    printf("%.2f\n",ans);  
-//    
-//    return 0;  
-//}  
-
 
 cv::Mat computeRotaMat(double yaw, double pitch, double roll)
 {
@@ -254,9 +269,7 @@ std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<in
 
   double pCols = longitude*du + panoWidth/2;
   double pRows = panoHeight/2 - latitude*dv;
-  //std::cout << pRows << "    " << pCols << std::endl;
   std::pair<double, double> coord = std::make_pair(pRows, pCols);
-  //std::pair<double, double> coord = std::make_pair(pCols, pRows);
 
   return coord;
 }
@@ -322,7 +335,8 @@ bool convertWarpCoord2Pano2(std::vector<std::pair<double, double> >& boxesCoord,
     const std::vector<float> detection = detections[i];  
     int index = static_cast<int>(detection[0]);
     int currentInx = filtedIndexs[current];
-    int num = 0;
+    //std::cout << current << std::endl;
+    //std::cout << currentInx << " index " << index << std::endl;
     if (currentInx == index){
       current++;
       double xmin = static_cast<double>(detection[3] * warpWidth);
@@ -339,7 +353,6 @@ bool convertWarpCoord2Pano2(std::vector<std::pair<double, double> >& boxesCoord,
         cols = ymax;
         coord = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
         boxesCoord.push_back(coord);
-        num++;
       }
       for(double cols = ymin; cols < ymax; cols += 1){
         double rows = xmin;
@@ -547,6 +560,7 @@ bool setCoord(std::vector<float>& d, Point* p)
   p[2].y = static_cast<double>(ymax);
   p[3].x = static_cast<double>(xmin);
   p[3].y = static_cast<double>(ymax);
+  p[4] = p[0];
 
   return true;
 }
@@ -556,34 +570,42 @@ float computeOverlap(std::vector<float> d1, std::vector<float> d2)
   Point ps1[100], ps2[100];
   setCoord(d1, ps1);
   setCoord(d2, ps2);
-  //ps1[0].x = -1;
-  //ps1[0].y = 1;
-  //ps1[1].x = 0;
-  //ps1[1].y = 0;
-  //ps1[2].x = 1;
-  //ps1[2].y = 1;
-  //ps1[3].x = 0;
-  //ps1[3].y = 2;
 
-  //ps2[0].x = 0;
-  //ps2[0].y = 0;
-  //ps2[1].x = 2;
-  //ps2[1].y = 0;
-  //ps2[2].x = 2;
-  //ps2[2].y = 2;
-  //ps2[3].x = 0;
-  //ps2[3].y = 2;
+  bool flag = false;
+  for(int i = 0; i < 4; i++)
+  {
+    for(int j = 0; j < 4; j++)
+    {
+      if(SegmentIntersection(ps1[i], ps1[i+1], ps2[j], ps2[j+1]))
+      {
+        flag = true;
+      }
+    }
+  }
 
-  std::cout << ps1[0].x << " " << ps1[1].x << " " 
-    << ps2[0].x << " " << ps2[1].x << std::endl;
-  std::cout << ps1[0].y << " " << ps1[1].y << " " 
-    << ps2[0].y << " " << ps2[1].y << std::endl;
-  std::cout << std::endl;
-  double interArea = intersectArea(ps1, 4, ps2, 4);
-  double unionArea = fabs(area(ps1, 4)) + fabs(area(ps2, 4)) - interArea;
-  std::cout << interArea << " area " << unionArea << std::endl;
+  if((ps1[0].x > ps2[0].x) && (ps1[0].y > ps2[0].y) && (ps1[1].x < ps2[1].x)
+      && (ps1[2].y < ps2[2].y)) 
+  {
+    flag = true;
+  } else if((ps1[0].x > ps2[0].x) && (ps1[0].y > ps2[0].y) && (ps1[1].x < ps2[1].x)
+      && (ps1[2].y < ps2[2].y)) 
+  {
+    flag = true;
+  }
 
-  return interArea/unionArea;
+  if(flag)
+  {
+    double interArea = intersectArea(ps1, 4, ps2, 4);
+    double area1 = fabs(area(ps1, 4));
+    double area2 = fabs(area(ps2, 4));
+    double unionArea = area1 + area2 - interArea;
+    //std::cout << interArea << " area " << unionArea << std::endl;
+    //std::cout << std::max(interArea/unionArea, std::max(interArea/area1, interArea/area2)) 
+    //  << std::endl;
+    return std::max(interArea/unionArea, std::max(interArea/area1, interArea/area2));
+  } else {
+    return 0;
+  }
 }
 
 bool compareFunc(std::vector<float> a, std::vector<float> b)
@@ -593,23 +615,36 @@ bool compareFunc(std::vector<float> a, std::vector<float> b)
 
 bool applyNMS(std::vector<std::vector<float> >& mapDetections, std::vector<int>& filtedIndexs)
 {
+  //for(int i = 0; i < mapDetections.size(); i++)
+  //{
+  //  std::vector<float> d = mapDetections[i];
+  //  std::cout << d[0] << " aaa" << std::endl;
+  //}
   sort(mapDetections.begin(), mapDetections.end(), compareFunc);
   for(int i = 0; i < mapDetections.size(); i++)
   {
+    std::vector<float> d1 = mapDetections[i];
     for(int j = mapDetections.size()-1; j > i; j--)
     {
+      std::vector<float> d2 = mapDetections[j];
       float th = computeOverlap(mapDetections[i], mapDetections[j]);
-      std::cout << th << std::endl;
+      std::cout << "th is " << th << std::endl;
       //if(computeOverlap(mapDetections[i], mapDetections[j]) > 0.5)
-      if(th > 0.5)
+      //if((th > 0.5) && (d1[1] != d2[1]))
+      if(th > 0.1)
       {
-        mapDetections.erase(mapDetections.begin() + j -1);
+        std::cout << th << std::endl;
+        //std::cout << d2[1] << " " << d2[2] << " " << d2[3] << " " << d2[4] << " "
+        //  << d2[5] << " " << d2[6] << std::endl;
+        mapDetections.erase(mapDetections.begin() + j);
       }
     }
   }
+
   for(int i = 0; i < mapDetections.size(); i++)
   {
     std::vector<float> d = mapDetections[i];
+    //std::cout << d[0] << " aaa" << std::endl;
     filtedIndexs.push_back(d[0]);
   }
 
@@ -625,12 +660,12 @@ bool applyNMS4Detections(std::vector<std::vector<std::vector<float> > >& allDete
   double F  = (warpWidth/2)/tan(hFOV/2.f);
   double du = panoWidth/2/CV_PI;
   double dv = panoHeight/CV_PI;
-  static std::vector<std::vector<float> > mapDetections;
+  std::vector<std::vector<float> > mapDetections;
   for(int j = 0; j < allDetections.size(); j++)
   {
     std::vector<std::vector<float> > detections = allDetections[j];
     cv::Mat rotaMat = rotaMats[j];
-    for(size_t i = 0; i < detections.size(); ++i)
+    for(int i = 0; i < detections.size(); ++i)
     {
       const std::vector<float> detection = detections[i];  
       const float score = detection[2];

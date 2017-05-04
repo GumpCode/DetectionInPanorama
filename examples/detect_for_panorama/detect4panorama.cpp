@@ -294,9 +294,9 @@ int main(int argc, char** argv) {
   std::vector<double> params;
   //const double angle_47 = 47*CV_PI/180;
   const double angle_45 = 45*CV_PI/180;
-  const double hFOV = 50*CV_PI/180;
+  const double hFOV = 47*CV_PI/180;
   const double roll = 0.0;
-  const double angleOffset = 45*CV_PI/180;
+  //const double angleOffset = 45*CV_PI/180;
 
   /*准备每个视图的yaw, pitch, roll参数*/
   for(double pitch = -angle_45; pitch < angle_45+0.01; pitch += angle_45)
@@ -337,15 +337,15 @@ int main(int argc, char** argv) {
     CHECK(!img.empty()) << "Unable to decode image " << file;
     makeWarpImgList(img, warpImgs, rotaMats, size, hFOV);
     std::vector<std::vector<std::vector<float> > > allDetections;
+    int num_ = 0;
     for(int i = 0; i < warpImgs.size(); i++){
       cv::Mat im = warpImgs[i];
       cv::Mat rotaMat = rotaMats[i];
       //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
       std::vector<std::vector<float> > detections = detector.Detect(im);
-      int num_ = 0;
       for(int j = 0; j < detections.size(); j++)
       {
-        std::vector<float> d = detections[j];
+        std::vector<float>& d = detections[j];
         d[0] = num_++;
       }
       allDetections.push_back(detections);
@@ -374,6 +374,7 @@ int main(int argc, char** argv) {
     //drawCoordInPanoImg(img, boxesCoords);
     //cv::imwrite("out.jpg", img);
 
+
     std::vector<std::pair<double, double> > boxesCoords;
     int current = 0;
     for(int j = 0; j < allDetections.size(); j++)
@@ -385,6 +386,8 @@ int main(int argc, char** argv) {
     }
     drawCoordInPanoImg(img, boxesCoords);
     cv::imwrite("out.jpg", img);
+    cv::imshow("a", img);
+    cv::waitKey(0);
   }
   gettimeofday(&end,NULL);
   timer = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;
