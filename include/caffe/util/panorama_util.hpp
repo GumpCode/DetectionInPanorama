@@ -16,13 +16,33 @@ int sig(double d);
 int dcmp(double x);
 
 struct Point{  
-    double x,y; 
-    Point(){}  
-    Point(double x,double y):x(x),y(y){}  
-    bool operator==(const Point&p)const{  
-        return sig(x-p.x)==0&&sig(y-p.y)==0;  
-    }  
+  double x,y; 
+  Point(){}  
+  Point(double x,double y):x(x),y(y){}  
+  bool operator==(Point&p){  
+    return sig(x-p.x)==0&&sig(y-p.y)==0;  
+  }  
 };  
+
+struct Detection{
+  int imgId, id, label;
+  float score;
+  Point point[4];
+  Detection(){}
+  //Detection(int imgId, int id, int label, float score, Point p1,
+  //  Point p2, Point p3, Point p4):
+  //    imgId(imgId), id(id),label(label),score(score),point[0](p1.x,p1.y),
+  //    p2(p2.x,p2.y),p3(p3.x,p3.y),point[1](p4.x,p4.y){}
+};
+      
+struct aParams{
+  int warpWidth, warpHeight, panoWidth, panoHeight;
+  double F, du, dv;
+  aParams(int warpWidth, int warpHeight, int panoWidth, int panoHeight,
+    double F, double du, double dv):
+      warpWidth(warpWidth), warpHeight(warpHeight), panoWidth(panoWidth),
+      panoHeight(panoHeight), F(F), du(du), dv(dv){}
+};
 
 typedef Point Vector;
 
@@ -52,43 +72,28 @@ cv::Mat computeRotaMat(double yaw, double pitch, double roll);
 
 std::vector<cv::Mat> makeRotaMatList(std::vector<double>& params);
 
-int panoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, double hFOV, int width, int height);
+int panoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, aParams params);
 
-void makeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<cv::Mat>& rotaMats, const std::vector<int> size, double hFOV);
+void makeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<cv::Mat>& rotaMats, aParams params);
+
+std::pair<double, double> map2PanoCoord(double cols, double rows, aParams params, cv::Mat& rotaMat);
 
 std::vector<cv::Mat> convertRotaMat2Inv(std::vector<cv::Mat> rotaMats);
 
-std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<int> size, double F, double du, double dv, cv::Mat& rotaMat);
-
-bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, std::vector<std::vector<float> >& detections,
-		const std::vector<int> size, float confidence_threshold, cv::Mat& rotaMat, double hFOV);
-
-bool convertWarpCoord2Pano2(std::vector<std::pair<double, double> >& boxesCoord, std::vector<std::vector<float> >& detections, std::vector<int>& filtedIndexs, int& current, 
-		const std::vector<int> size, cv::Mat& rotaMat, double hFOV);
+bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, std::vector<Detection>& detections, std::vector<int>& filtedIndexs, int& current, aParams params, cv::Mat& rotaMat);
 
 bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> > boxesCoords);
 
-bool drawCoordInWarpImg(cv::Mat& warpImg, std::vector<std::vector<float> >& detections, double confidence_threshold);
+bool drawCoordInWarpImg(cv::Mat& warpImg, std::vector<Detection>& detections, double confidence_threshold);
 
-bool fixPointRange(int& x, int& y, int width, int height);
+std::pair<int, int> fixPointRange(int x, int y, int width, int height);
 
-bool setCoord(std::vector<float>& d, Point* p);
+bool setCoord(Detection& d, Point* p, aParams params, std::vector<cv::Mat> rotaMat);
 
-float computeOverlap(std::vector<float> d1, std::vector<float> d2);
+float computeOverlap(Detection d1, Detection d2, aParams& params, std::vector<cv::Mat>& rotaMat);
 
-bool compareFunc(std::vector<float> a, std::vector<float> b);
+bool sortByScore(Detection a, Detection b);
 
-bool applyNMS(std::vector<std::vector<float> >& mapDetections, std::vector<int>& filtedIndexs);
+bool applyNMS(std::vector<Detection >& mapDetections, std::vector<int>& filtedIndexs, aParams& params, std::vector<cv::Mat> rotaMat);
 
-//std::vector<int> applyNMS4Detections(std::vector<std::vector<std::vector<float> > >& allDetections, std::vector<int> size, float confidence_threshold, std::vector<cv::Mat> rotaMats, double hFOV);
-bool applyNMS4Detections(std::vector<std::vector<std::vector<float> > >& allDetections, std::vector<int>& filtedIndexs, std::vector<int> size, float confidence_threshold, std::vector<cv::Mat> rotaMats, double hFOV);
-
-//void flip(std::vector<float>& coord, std::vector<int> size);
-//
-//bool map2OtherView(std::vector<std::vector<float > >&mapCoords, std::vector<std::vector<float> >& coords, std::vector<cv::Mat>& rotaMats, int srcNum, int dstNum, float confidence_threshold, std::vector<int> size, double hFOV);
-//
-//float computCrossArea(std::vector<float>& mapCoord1, std::vector<float>& mapCoord2);
-//
-//bool applyNMS(std::vector<std::vector<float> >& mapCoords, std::vector<std::vector<float> >& detections);
-//
-//bool applyNMS4Detections(std::vector<std::vector<std::vector<float> > >& allDetections, std::vector<int> size, float confidence_threshold, std::vector<cv::Mat >& rotaMats, double hFOV, double angleOffset);
+bool applyNMS4Detections(std::vector<std::vector<Detection > >& allDetections, std::vector<int>& filtedIndexs, aParams& params, float confidence_threshold, std::vector<cv::Mat> rotaMats);

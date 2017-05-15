@@ -289,9 +289,9 @@ int main(int argc, char** argv) {
   int warpHeight = 300;
   int panoWidth = 3840;
   int panoHeight = 1920;
-  int s[] = {warpWidth, warpHeight, panoWidth, panoHeight};
-  std::vector<int> size(s, s+4);
-  std::vector<double> params;
+  //int s[] = {warpWidth, warpHeight, panoWidth, panoHeight};
+  //std::vector<int> size(s, s+4);
+  //std::vector<double> params;
   //const double angle_47 = 47*CV_PI/180;
   const double angle_45 = 45*CV_PI/180;
   const double hFOV = 47*CV_PI/180;
@@ -299,33 +299,45 @@ int main(int argc, char** argv) {
   //const double angleOffset = 45*CV_PI/180;
 
   /*准备每个视图的yaw, pitch, roll参数*/
+  std::vector<double> rotaParams;
   for(double pitch = -angle_45; pitch < angle_45+0.01; pitch += angle_45)
   {
+    int n = 0;
     for(double yaw = 0; yaw < 2*CV_PI; yaw += angle_45)
     {
+      n++;
+      //if((yaw + hFOV/2) > 2*CV_PI)
+      //{
+      //  std::cout << yaw + hFOV/2 << std::endl;
+      //  std::cout << "error" << std::endl;
+      //}
       //[yaw, pitch, roll]
-      params.push_back(yaw);
-      params.push_back(pitch);
-      params.push_back(roll);
+      rotaParams.push_back(yaw);
+      rotaParams.push_back(pitch);
+      rotaParams.push_back(roll);
     }
   }
 
   //for top view
-  params.push_back(0.0);
-  params.push_back(CV_PI);
-  params.push_back(roll);
+  rotaParams.push_back(0.0);
+  rotaParams.push_back(CV_PI);
+  rotaParams.push_back(roll);
   //for bottom view
-  params.push_back(0.0);
-  params.push_back(-CV_PI/2);
-  params.push_back(roll);
+  rotaParams.push_back(0.0);
+  rotaParams.push_back(-CV_PI/2);
+  rotaParams.push_back(roll);
 
-  std::vector<cv::Mat> rotaMats = makeRotaMatList(params);
+  std::vector<cv::Mat> rotaMats = makeRotaMatList(rotaParams);
   std::vector<cv::Mat> rotaMatsInv = convertRotaMat2Inv(rotaMats);
 
   std::ifstream infile(argv[3]);
   std::string file;
-  std::vector<std::vector<float> > detections;
   std::vector<cv::Mat> warpImgs;
+
+  double F = (warpWidth/2)/tan(hFOV/2.f);
+  double du = panoWidth/2/CV_PI;
+  double dv = panoHeight/CV_PI;
+  aParams params(warpWidth, warpHeight, panoWidth, panoHeight, F, du, dv);
 
   struct timeval start;
   struct timeval end;
@@ -335,59 +347,69 @@ int main(int argc, char** argv) {
   while(infile >> file){
     cv::Mat img = cv::imread(file, -1);
     CHECK(!img.empty()) << "Unable to decode image " << file;
-    makeWarpImgList(img, warpImgs, rotaMats, size, hFOV);
-    std::vector<std::vector<std::vector<float> > > allDetections;
+    makeWarpImgList(img, warpImgs, rotaMats, params);
+    std::vector<std::vector<Detection> > allDetections;
     int num_ = 0;
     for(int i = 0; i < warpImgs.size(); i++){
       cv::Mat im = warpImgs[i];
       cv::Mat rotaMat = rotaMats[i];
       //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
       std::vector<std::vector<float> > detections = detector.Detect(im);
+      std::vector<Detection> detections_tmp;
+      //Point p1, p2, p3, p4;
       for(int j = 0; j < detections.size(); j++)
       {
-        std::vector<float>& d = detections[j];
-        d[0] = num_++;
+        Detection detection;
+        std::vector<float> d = detections[j];
+        detection.imgId = i;
+        detection.id = num_++;
+        detection.label = d[1];
+        detection.score = d[2];
+        detection.point[0].x = static_cast<double>(d[3] * params.warpWidth);  //xmin
+        detection.point[0].y = static_cast<double>(d[4] * params.warpHeight); //ymin
+        detection.point[1].x = static_cast<double>(d[5] * params.warpWidth);  //xmax
+        detection.point[1].y = static_cast<double>(d[4] * params.warpHeight); //ymin
+        detection.point[2].x = static_cast<double>(d[5] * params.warpWidth);  //xmax
+        detection.point[2].y = static_cast<double>(d[6] * params.warpHeight); //ymax
+        detection.point[3].x = static_cast<double>(d[3] * params.warpWidth);  //xmin
+        detection.point[3].y = static_cast<double>(d[6] * params.warpHeight); //ymax
+        for(int k = 0; k < 4; k++)
+        {
+          std::pair<int, int> p = fixPointRange(detection.point[k].x, detection.point[k].y,
+              params.warpWidth, params.warpHeight);
+          detection.point[k].x = p.first;
+          detection.point[k].y = p.second;
+        }
+        detections_tmp.push_back(detection);
       }
-      allDetections.push_back(detections);
+      allDetections.push_back(detections_tmp);
 
-      //drawCoordInWarpImg(im, detections, confidence_threshold);
-      //std::stringstream ss;
-      //ss << i;
-      //std::string s;
-      //ss >> s;
-      //s = s + ".jpg";
-      //cv::imwrite(s, im);
+      drawCoordInWarpImg(im, detections_tmp, confidence_threshold);
+      std::stringstream ss;
+      ss << i;
+      std::string s;
+      ss >> s;
+      s = s + ".jpg";
+      cv::imwrite(s, im);
     }
 
     std::vector<int> filtedIndexs;
-    applyNMS4Detections(allDetections, filtedIndexs, size, confidence_threshold,
-        rotaMats, hFOV);
-
-    //std::vector<std::pair<double, double> > boxesCoords;
-    //for(int j = 0; j < allDetections.size(); j++)
-    //{
-    //  cv::Mat rotaMat = rotaMats[j];
-    //  std::vector<std::vector<float> > detections = allDetections[j];
-    //  convertWarpCoord2Pano(boxesCoords, detections, size,
-    //      confidence_threshold, rotaMat, hFOV);
-    //}
-    //drawCoordInPanoImg(img, boxesCoords);
-    //cv::imwrite("out.jpg", img);
-
+    applyNMS4Detections(allDetections, filtedIndexs, params, confidence_threshold,
+        rotaMats);
 
     std::vector<std::pair<double, double> > boxesCoords;
     int current = 0;
     for(int j = 0; j < allDetections.size(); j++)
     {
       cv::Mat rotaMat = rotaMats[j];
-      std::vector<std::vector<float> > detections = allDetections[j];
-      convertWarpCoord2Pano2(boxesCoords, detections, filtedIndexs, 
-          current, size, rotaMat, hFOV);
+      std::vector<Detection> detections = allDetections[j];
+      convertWarpCoord2Pano(boxesCoords, detections, filtedIndexs, 
+          current, params, rotaMat);
     }
     drawCoordInPanoImg(img, boxesCoords);
     cv::imwrite("out.jpg", img);
-    cv::imshow("a", img);
-    cv::waitKey(0);
+    //cv::imshow("a", img);
+    //cv::waitKey(0);
   }
   gettimeofday(&end,NULL);
   timer = 1000000 * (end.tv_sec - start.tv_sec) + end.tv_usec - start.tv_usec;

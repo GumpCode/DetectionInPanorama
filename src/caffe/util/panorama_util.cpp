@@ -178,35 +178,28 @@ std::vector<cv::Mat> makeRotaMatList(std::vector<double>& params)
 }
 
 
-int panoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, double hFOV, int width, int height)
+int panoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, aParams params)
 {
-  int srcWidth  = srcPanoImg.cols;
-  int srcHeight = srcPanoImg.rows;
-
-  if (srcWidth != srcHeight*2)
+  if (params.panoWidth != params.panoHeight*2)
   {
     return 2;
   } 
 
-  if (width <= 0 || height <= 0)
+  if (params.warpWidth <= 0 || params.warpHeight <= 0)
   {
     return 4;
   }
 
-  double F  = (width/2)/tan(hFOV/2.f);
-  double du = srcWidth/2/CV_PI;
-  double dv = srcHeight/CV_PI;
-
   cv::Mat tmpCoor = cv::Mat::zeros(3, 1, CV_64F);
-  cv::Mat warpMap = cv::Mat(height, width, CV_32FC2);
+  cv::Mat warpMap = cv::Mat(params.warpHeight, params.warpWidth, CV_32FC2);
 
-  for(int j = 0; j < height; j++)
+  for(int j = 0; j < params.warpHeight; j++)
   {
-    for(int i = 0; i < width; i++)
+    for(int i = 0; i < params.warpWidth; i++)
     {
-      tmpCoor.at<double>(0) = (double)(i-width/2);
-      tmpCoor.at<double>(1) = (double)(height/2-j);
-      tmpCoor.at<double>(2) = F;
+      tmpCoor.at<double>(0) = (double)(i-params.warpWidth/2);
+      tmpCoor.at<double>(1) = (double)(params.warpHeight/2-j);
+      tmpCoor.at<double>(2) = params.F;
 
       tmpCoor = rotaMat*tmpCoor;
       normalize(tmpCoor, tmpCoor);
@@ -214,27 +207,25 @@ int panoImg2Warp(cv::Mat& srcPanoImg, cv::Mat& dstWarpImg, cv::Mat& rotaMat, dou
       double latitude  = asin(tmpCoor.at<double>(1));
       double longitude = atan2(tmpCoor.at<double>(0), tmpCoor.at<double>(2));
 
-      float u = longitude*du + srcWidth/2;
-      float v = srcHeight/2 - latitude*dv;
+      float u = longitude*params.du + params.panoWidth/2;
+      float v = params.panoHeight/2 - latitude*params.dv;
 
       warpMap.at<cv::Point2f>(j, i) = cv::Point2f(u, v);
     }
   }
 
-  dstWarpImg = cv::Mat(height, width, CV_8UC3, cv::Scalar(0, 0, 0));
+  dstWarpImg = cv::Mat(params.warpHeight,  params.warpWidth, CV_8UC3, cv::Scalar(0, 0, 0));
   remap(srcPanoImg, dstWarpImg, warpMap, cv::Mat(), CV_INTER_CUBIC, cv::BORDER_WRAP);
 
   return 0;
 }
 
-void makeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<cv::Mat>& rotaMats, const std::vector<int> size, double hFOV)
+void makeWarpImgList(cv::Mat& srcPanoImg, std::vector<cv::Mat>& warpImgList, std::vector<cv::Mat>& rotaMats, aParams params)
 {
-  int width = size[0];
-  int height = size[1];
-  size_t index = 0;
+  int index = 0;
   cv::Mat dst;
   while(index < rotaMats.size()){
-    panoImg2Warp(srcPanoImg, dst, rotaMats[index++], hFOV, width, height);
+    panoImg2Warp(srcPanoImg, dst, rotaMats[index++], params);
     warpImgList.push_back(dst);
   }
 }
@@ -249,17 +240,13 @@ std::vector<cv::Mat> convertRotaMat2Inv(std::vector<cv::Mat> rotaMats)
   return rotaMatsInv;
 }
 
-std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<int> size, double F, double du, double dv, cv::Mat& rotaMat)
+std::pair<double, double> map2PanoCoord(double cols, double rows, aParams params, cv::Mat& rotaMat)
 {
-  int warpWidth = size[0];
-  int warpHeight = size[1];
-  int panoWidth = size[2];
-  int panoHeight = size[3];
   cv::Mat tmpCoor = cv::Mat::zeros(3, 1, CV_64F);
 
-  tmpCoor.at<double>(0) = static_cast<double>(rows - warpWidth/2);
-  tmpCoor.at<double>(1) = static_cast<double>(warpHeight/2 - cols);
-  tmpCoor.at<double>(2) = F;
+  tmpCoor.at<double>(0) = static_cast<double>(cols - params.warpWidth/2);
+  tmpCoor.at<double>(1) = static_cast<double>(params.warpHeight/2 - rows);
+  tmpCoor.at<double>(2) = params.F;
 
   tmpCoor = rotaMat*tmpCoor;
   normalize(tmpCoor, tmpCoor);
@@ -267,100 +254,44 @@ std::pair<double, double> map2PanoCoord(double cols, double rows, std::vector<in
   double latitude  = asin(tmpCoor.at<double>(1));
   double longitude = atan2(tmpCoor.at<double>(0), tmpCoor.at<double>(2));
 
-  double pCols = longitude*du + panoWidth/2;
-  double pRows = panoHeight/2 - latitude*dv;
-  std::pair<double, double> coord = std::make_pair(pRows, pCols);
+  double pCols = longitude*params.du + params.panoWidth/2;
+  double pRows = params.panoHeight/2 - latitude*params.dv;
+  std::pair<double, double> coord = std::make_pair(pCols, pRows);
 
   return coord;
 }
 
 
-bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, std::vector<std::vector<float> >& detections,
-		const std::vector<int> size, float confidence_threshold, cv::Mat& rotaMat, double hFOV)
+bool convertWarpCoord2Pano(std::vector<std::pair<double, double> >& boxesCoord, std::vector<Detection>& detections, std::vector<int>& filtedIndexs, int& current, aParams params, cv::Mat& rotaMat)
 {
-  int warpWidth = size[0];
-  int warpHeight = size[1];
-  int panoWidth = size[2];
-  int panoHeight = size[3];
-  double F  = (warpWidth/2)/tan(hFOV/2.f);
-  double du = panoWidth/2/CV_PI;
-  double dv = panoHeight/CV_PI;
   for(size_t i = 0; i < detections.size(); ++i){
-    const std::vector<float>& detection = detections[i];  
-    const float score = detection[2]; 
-    if (score >= confidence_threshold){
-      double xmin = static_cast<double>(detection[3] * warpWidth);
-      double ymin = static_cast<double>(detection[4] * warpHeight); 
-      double xmax = static_cast<double>(detection[5] * warpWidth); 
-      double ymax = static_cast<double>(detection[6] * warpHeight); 
-      //[xmin, ymin, xmax, ymax]
-      for(double rows = xmin; rows < xmax; rows += 1){
-        double cols = ymin;
-        std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
-        boxesCoord.push_back(coord1);
-      }
-
-      for(double rows = xmin; rows < xmax; rows += 1){
-        double cols = ymax;
-        std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
-        boxesCoord.push_back(coord2);
-      }
-
-      for(double cols = ymin; cols < ymax; cols += 1){
-        double rows = xmin;
-        std::pair<double, double> coord1 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
-        boxesCoord.push_back(coord1);
-      }
-
-      for(double cols = ymin; cols < ymax; cols += 1){
-        double rows = xmax;
-        std::pair<double, double> coord2 = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
-        boxesCoord.push_back(coord2);
-      }
-    }
-  }
-  return true;
-}
-
-bool convertWarpCoord2Pano2(std::vector<std::pair<double, double> >& boxesCoord, std::vector<std::vector<float> >& detections, std::vector<int>& filtedIndexs, int& current, const std::vector<int> size, cv::Mat& rotaMat, double hFOV)
-{
-  int warpWidth = size[0];
-  int warpHeight = size[1];
-  int panoWidth = size[2];
-  int panoHeight = size[3];
-  double F  = (warpWidth/2)/tan(hFOV/2.f);
-  double du = panoWidth/2/CV_PI;
-  double dv = panoHeight/CV_PI;
-  for(size_t i = 0; i < detections.size(); ++i){
-    const std::vector<float> detection = detections[i];  
-    int index = static_cast<int>(detection[0]);
+    Detection detection = detections[i];  
+    int index = static_cast<int>(detection.id);
     int currentInx = filtedIndexs[current];
-    //std::cout << current << std::endl;
-    //std::cout << currentInx << " index " << index << std::endl;
     if (currentInx == index){
       current++;
-      double xmin = static_cast<double>(detection[3] * warpWidth);
-      double ymin = static_cast<double>(detection[4] * warpHeight); 
-      double xmax = static_cast<double>(detection[5] * warpWidth); 
-      double ymax = static_cast<double>(detection[6] * warpHeight); 
+      double xmin = static_cast<double>(detection.point[0].x);
+      double ymin = static_cast<double>(detection.point[0].y); 
+      double xmax = static_cast<double>(detection.point[2].x); 
+      double ymax = static_cast<double>(detection.point[2].y); 
       //[xmin, ymin, xmax, ymax]
       std::pair<double, double> coord;
-      for(double rows = xmin; rows < xmax; rows += 1){
-        double cols = ymin;
-        coord = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
+      for(double cols = xmin; cols < xmax; cols += 1){
+        double rows = ymin;
+        coord = map2PanoCoord(cols, rows, params, rotaMat);
         boxesCoord.push_back(coord);
 
-        cols = ymax;
-        coord = map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
+        rows = ymax;
+        coord = map2PanoCoord(cols, rows, params, rotaMat);
         boxesCoord.push_back(coord);
       }
-      for(double cols = ymin; cols < ymax; cols += 1){
-        double rows = xmin;
-        coord= map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
+      for(double rows = ymin; rows < ymax; rows += 1){
+        double cols = xmin;
+        coord= map2PanoCoord(cols, rows, params, rotaMat);
         boxesCoord.push_back(coord);
 
-        rows = xmax;
-        coord= map2PanoCoord(cols, rows, size, F, du, dv, rotaMat);
+        cols = xmax;
+        coord= map2PanoCoord(cols, rows, params, rotaMat);
         boxesCoord.push_back(coord);
       }
     }
@@ -370,10 +301,10 @@ bool convertWarpCoord2Pano2(std::vector<std::pair<double, double> >& boxesCoord,
 
 bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> > boxesCoords)
 {
-  for(size_t index = 0; index < boxesCoords.size(); index++)
+  for(int index = 0; index < boxesCoords.size(); index++)
   {
-    int row = static_cast<int>(boxesCoords[index].first);
-    int col = static_cast<int>(boxesCoords[index].second);
+    int col = static_cast<int>(boxesCoords[index].first);
+    int row = static_cast<int>(boxesCoords[index].second);
     cv::Point point;
     point.x = col;
     point.y = row;
@@ -383,23 +314,7 @@ bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::pair<double, double> 
   return true;
 }
 
-//bool drawCoordInPanoImg(cv::Mat& panoImg, std::vector<std::vector<float> > boxesCoords)
-//{
-//  for(size_t index = 0; index < boxesCoords.size(); index++)
-//  {
-//    std::vector<float> detection = boxesCoords[index];
-//    int row = static_cast<int>(detection[);
-//    int col = static_cast<int>(boxesCoords[index].second);
-//    cv::Point point;
-//    point.x = col;
-//    point.y = row;
-//    cv::circle(panoImg, point, 1, cv::Scalar(0,0,255));
-//  }
-//
-//  return true;
-//}
-
-bool fixPointRange(int& x, int& y, int width, int height)
+std::pair<int, int> fixPointRange(int x, int y, int width, int height)
 {
   if(x <= 0)
   {
@@ -411,165 +326,83 @@ bool fixPointRange(int& x, int& y, int width, int height)
   } else if(y > height){
     y = height;
   }
-  return true;
+  std::pair<int, int> p = std::make_pair(x, y);
+
+  return p;
 }
 
-bool drawCoordInWarpImg(cv::Mat& warpImg, std::vector<std::vector<float> >& detections, double confidence_threshold)
+bool drawCoordInWarpImg(cv::Mat& warpImg, std::vector<Detection>& detections, double confidence_threshold)
 {
   //Detection format: [image_id, label, score, xmin, ymin, xmax, ymax].
   for(size_t i = 0; i < detections.size(); ++i)
   {
-    const std::vector<float>& detection = detections[i];  
-    const float score = detection[2]; 
+    Detection& detection = detections[i];
+    const float score = detection.score; 
     if (score >= confidence_threshold)
     {
-      int xmin = static_cast<double>(detection[3] * warpImg.cols);
-      int ymin = static_cast<double>(detection[4] * warpImg.rows); 
-      int xmax = static_cast<double>(detection[5] * warpImg.cols); 
-      int ymax = static_cast<double>(detection[6] * warpImg.rows); 
-      fixPointRange(xmin, ymin, warpImg.cols, warpImg.rows);
-      fixPointRange(xmax, ymax, warpImg.cols, warpImg.rows);
-      cv::rectangle(warpImg, cv::Point(xmin, ymin), cv::Point(xmax, ymax), cv::Scalar(255, 0, 255), 2);
+      int xmin = static_cast<double>(detection.point[0].x);
+      int ymin = static_cast<double>(detection.point[0].y); 
+      int xmax = static_cast<double>(detection.point[2].x); 
+      int ymax = static_cast<double>(detection.point[2].y); 
+      std::pair<int, int> pMin = fixPointRange(xmin, ymin, warpImg.cols, warpImg.rows);
+      std::pair<int, int> pMax = fixPointRange(xmax, ymax, warpImg.cols, warpImg.rows);
+      cv::rectangle(warpImg, cv::Point(pMin.first, pMin.second), cv::Point(pMax.first, pMax.second), 
+          cv::Scalar(255, 0, 255), 2);
     }
   }
   return true;
 }
 
-
-//bool map2OtherView(std::vector<std::vector<float > >&mapCoords, std::vector<std::vector<float> >& coords, std::vector<cv::Mat>& rotaMats, int srcNum, int dstNum, float confidence_threshold, std::vector<int> size, double hFOV, double angleOffset)
-//{
-//  int num = 0;
-//  for(size_t k = 0; k < coords.size(); k++)
-//  {
-//    const vector<float>& coord = coords[k];
-//    float score = coord[2];
-//    if(score > confidence_threshold){
-//      num++;
-//    }
-//  }
-//  if(!num)
-//  {
-//    return false;
-//  }
-//
-//  double F  = (size[0]/2)/tan(hFOV/2.f);
-//  for(int i = 0; i < coords.size(); i++)
-//  {
-//    vector<float> coord = coords[i];
-//    vector<float> tmp(coord);
-//    float score = coord[2];
-//    if(score > confidence_threshold)
-//    {
-//      //flip(tmp, size);
-//      for(int j = 3; j < coord.size(); j+=2)
-//      {
-//        cv::Mat tmpCoor = Mat::zeros(3, 1, CV_64F);
-//        //std::cout << "coord" << j << " is " << tmp[j] << std::endl;
-//        //std::cout << "coord" << j+1 << " is " << tmp[j+1] << std::endl;
-//        tmpCoor.at<double>(0) = static_cast<double>(tmp[j]*size[0] - size[0]/2);
-//        tmpCoor.at<double>(1) = static_cast<double>(size[1]/2 - tmp[j+1]*size[1]);
-//        tmpCoor.at<double>(2) = F;
-//        std::cout << "coord" << j << " is " << tmpCoor.at<double>(0) << std::endl;
-//        std::cout << "coord" << j+1 << " is " << tmpCoor.at<double>(1) << std::endl;
-//        tmpCoor = rotaMats[dstNum]*rotaMats[srcNum].inv()*tmpCoor;
-//        tmp[0] = tmpCoor.at<float>(0) + size[0]/2;
-//        tmp[1] = size[1]/2 - tmpCoor.at<float>(1);
-//        //std::cout << "tmp" << j << " is " << tmp[0] << std::endl;
-//        //std::cout << "tmp" << j+1 << " is " << tmp[1] << std::endl;
-//      }
-//      tmp.push_back(i);
-//      mapCoords.push_back(tmp);
-//    }
-//  }
-//  return true;
-//}
-//
-//float computCrossArea(std::vector<float>& mapCoord1, std::vector<float>& mapCoord2)
-//{
-//  float area = 0;
-//  return area;
-//}
-//
-//bool applyNMS(std::vector<std::vector<float> >& mapCoords, std::vector<std::vector<float> >& detections)
-//{
-//  float area_threshold = 0.5;
-//  for(size_t i = 0; i < mapCoords.size(); i++)
-//  {
-//    for(size_t j = i; j < mapCoords.size(); j++)
-//    {
-//      if(computCrossArea(mapCoords[i], mapCoords[j]) > area_threshold)
-//      {
-//        if(mapCoords[i][2] > mapCoords[j][2])
-//        {
-//          //to do: remove j by index
-//          ;
-//        }
-//      }
-//    }
-//  }
-//  return true;
-//}
-//
-//bool applyNMS4Detections(std::vector<std::vector<std::vector<float> > >& allDetections, std::vector<int> size, float confidence_threshold, std::vector<cv::Mat >& rotaMats, double hFOV, double angleOffset)
-//{
-//  for(int i = 0; i < allDetections.size(); i++)
-//  {
-//    std::vector<std::vector<float> > mapCoords;
-//    if(i==0)
-//    //if((i>=0) && (i<=7))
-//    {
-//      map2OtherView(mapCoords, allDetections[i+1], rotaMats, i+1, i, confidence_threshold, size, hFOV, angleOffset);
-//      //applyNMS(mapCoords, allDetections[i+1]);
-//      //map2OtherView(mapCoords, allDetections[i+8], rotaMats, i+8, i, confidence_threshold, size, hFOV);
-//      //applyNMS(allDetections[i+8], mapCoords);
-//      //map2OtherView(mapCoords, allDetections[i+9], rotaMats, i+9, i, confidence_threshold, size, hFOV);
-//      //applyNMS(allDetections[i+9], mapCoords);
-//      //map2OtherView(mapCoords, allDetections[24], rotaMats, 24, i, confidence_threshold, size, hFOV);
-//      //applyNMS(allDetections[24], mapCoords);
-//    //} else if((i>=8) && (i<=15)) {
-//      //map2OtherView(mapCoords, allDetections[i-8], rotaMats, i-8, i, confidence_threshold, size, hFOV);
-//      //map2OtherView(mapCoords, allDetections[i-7], rotaMats, i-7, i, confidence_threshold, size, hFOV);
-//      //map2OtherView(mapCoords, allDetections[i+1], rotaMats, i+1, i, confidence_threshold, size, hFOV);
-//      //map2OtherView(mapCoords, allDetections[i+8], rotaMats, i+8, i, confidence_threshold, size, hFOV);
-//      //map2OtherView(mapCoords, allDetections[i+9], rotaMats, i+9, i, confidence_threshold, size, hFOV);
-//      //applyNMS(allDetections[i], mapCoords);
-//
-//    //} else if((i>=16) && (i<=23)) {
-//    //  map2OtherView(mapCoords, allDetections[i+1], rotaMats, i+1, i, confidence_threshold, hFOV);
-//    //  map2OtherView(mapCoords, allDetections[i+8], rotaMats, i+8, i, confidence_threshold, hFOV);
-//    //  map2OtherView(mapCoords, allDetections[i+9], rotaMats, i+9, i, confidence_threshold, hFOV);
-//    //  map2OtherView(mapCoords, allDetections[25], rotaMats, 25, i, confidence_threshold, hFOV);
-//    //  applyNMS(allDetections[i], mapCoords);
-//    }
-//  }
-//  return true;
-//}
-//
-
-bool setCoord(std::vector<float>& d, Point* p)
+bool setCoord(Detection& d, Point* p, aParams params, std::vector<cv::Mat> rotaMats)
 {
-  float xmin = d[3];
-  float ymin = d[4];
-  float xmax = d[5];
-  float ymax = d[6];
-  p[0].x = static_cast<double>(xmin);
-  p[0].y = static_cast<double>(ymin);
-  p[1].x = static_cast<double>(xmax);
-  p[1].y = static_cast<double>(ymin);
-  p[2].x = static_cast<double>(xmax);
-  p[2].y = static_cast<double>(ymax);
-  p[3].x = static_cast<double>(xmin);
-  p[3].y = static_cast<double>(ymax);
+  std::pair<double, double> coord;
+  coord = map2PanoCoord(d.point[0].x, d.point[0].y, params, rotaMats[d.imgId]);
+  p[0].x = coord.first;
+  p[0].y = coord.second;
+  coord = map2PanoCoord(d.point[1].x, d.point[1].y, params, rotaMats[d.imgId]);
+  p[1].x = coord.first;
+  p[1].y = coord.second;
+  coord = map2PanoCoord(d.point[2].x, d.point[2].y, params, rotaMats[d.imgId]);
+  p[2].x = coord.first;
+  p[2].y = coord.second;
+  coord = map2PanoCoord(d.point[3].x, d.point[3].y, params, rotaMats[d.imgId]);
+  p[3].x = coord.first;
+  p[3].y = coord.second;
+  if((fabs(p[0].x - p[2].x) > params.panoWidth/2) || 
+        (fabs(p[0].y - p[2].y) > params.panoHeight/2))
+  {
+    std::cout << "num " << d.imgId << std::endl;
+    std::cout << fabs(p[0].x - p[2].x) <<  "   " << 
+        fabs(p[0].y - p[2].y) << std::endl;
+    for(int i = 0; i < 4; i++)
+    {
+      std::cout << "a  " << p[i].x << "  " << p[i].y << std::endl;
+    }
+    p[1].x = params.panoWidth + p[1].x;
+    p[2].x = params.panoWidth + p[2].x;
+  }
+
   p[4] = p[0];
 
   return true;
 }
 
-float computeOverlap(std::vector<float> d1, std::vector<float> d2)
+float computeOverlap(Detection d1, Detection d2, aParams& params, std::vector<cv::Mat>& rotaMats)
 {
-  Point ps1[100], ps2[100];
-  setCoord(d1, ps1);
-  setCoord(d2, ps2);
+  Point ps1[10], ps2[10];
+  setCoord(d1, ps1, params, rotaMats);
+  setCoord(d2, ps2, params, rotaMats);
+  if(d2.imgId == 0)
+  {
+    for(int i = 0; i < 4; i++)
+    {
+      std::cout << "point 1 is " << ps1[i].x <<  "  " << ps1[i].y << std::endl;
+    }
+    for(int i = 0; i < 4; i++)
+    {
+      std::cout << "point 2 is " << ps2[i].x <<  "  " << ps2[i].y << std::endl;
+    }
+  }
 
   bool flag = false;
   for(int i = 0; i < 4; i++)
@@ -599,96 +432,102 @@ float computeOverlap(std::vector<float> d1, std::vector<float> d2)
     double area1 = fabs(area(ps1, 4));
     double area2 = fabs(area(ps2, 4));
     double unionArea = area1 + area2 - interArea;
+    //std::cout << area1 << " 1111 " << area2 << std::endl;
     //std::cout << interArea << " area " << unionArea << std::endl;
-    //std::cout << std::max(interArea/unionArea, std::max(interArea/area1, interArea/area2)) 
+    //std::cout << " max " << interArea/unionArea <<  " " << std::max(interArea/area1, interArea/area2)
     //  << std::endl;
     return std::max(interArea/unionArea, std::max(interArea/area1, interArea/area2));
+    //return interArea/unionArea;
   } else {
     return 0;
   }
 }
 
-bool compareFunc(std::vector<float> a, std::vector<float> b)
+bool sortByScore(Detection a, Detection b)
 {
-  return a[2] > b[2];
+  return a.score > b.score;
 }
 
-bool applyNMS(std::vector<std::vector<float> >& mapDetections, std::vector<int>& filtedIndexs)
+bool applyNMS(std::vector<Detection >& mapDetections, std::vector<int>& filtedIndexs, aParams& params, std::vector<cv::Mat> rotaMats)
 {
-  //for(int i = 0; i < mapDetections.size(); i++)
-  //{
-  //  std::vector<float> d = mapDetections[i];
-  //  std::cout << d[0] << " aaa" << std::endl;
-  //}
-  sort(mapDetections.begin(), mapDetections.end(), compareFunc);
+  sort(mapDetections.begin(), mapDetections.end(), sortByScore);
+  int num = 0;
   for(int i = 0; i < mapDetections.size(); i++)
   {
-    std::vector<float> d1 = mapDetections[i];
+    Detection d1 = mapDetections[i];
     for(int j = mapDetections.size()-1; j > i; j--)
     {
-      std::vector<float> d2 = mapDetections[j];
-      float th = computeOverlap(mapDetections[i], mapDetections[j]);
-      std::cout << "th is " << th << std::endl;
-      //if(computeOverlap(mapDetections[i], mapDetections[j]) > 0.5)
-      //if((th > 0.5) && (d1[1] != d2[1]))
-      if(th > 0.1)
+      Detection d2 = mapDetections[j];
+      float th = computeOverlap(d1, d2, params, rotaMats);
+      if(d2.imgId == 0){
+        if(th > 0.3)
+        {
+          std::cout << th << " th " << std::endl;
+        }
+      }
+      //if(th > 0 && (d2.imgId == 0 || d2.imgId == 1))
+      //{
+      //  int xmin = static_cast<double>(d1.point[0].x);
+      //  int ymin = static_cast<double>(d1.point[0].y); 
+      //  int xmax = static_cast<double>(d1.point[2].x); 
+      //  int ymax = static_cast<double>(d1.point[2].y); 
+      //  std::cout << "th is " << th << std::endl;
+      //  std::cout << xmin << " " << xmax << " " << ymin << " " << ymax << std::endl;
+      //  xmin = static_cast<double>(d2.point[0].x);
+      //  ymin = static_cast<double>(d2.point[0].y); 
+      //  xmax = static_cast<double>(d2.point[2].x); 
+      //  ymax = static_cast<double>(d2.point[2].y); 
+      //  std::cout << xmin << " " << xmax << " " << ymin << " " << ymax << std::endl;
+      //  std::cout << std::endl;
+      //  num++;
+      //}
+      if(th > 0.3)
       {
-        std::cout << th << std::endl;
-        //std::cout << d2[1] << " " << d2[2] << " " << d2[3] << " " << d2[4] << " "
-        //  << d2[5] << " " << d2[6] << std::endl;
         mapDetections.erase(mapDetections.begin() + j);
       }
     }
   }
+  std::cout << num << std::endl;
 
   for(int i = 0; i < mapDetections.size(); i++)
   {
-    std::vector<float> d = mapDetections[i];
-    //std::cout << d[0] << " aaa" << std::endl;
-    filtedIndexs.push_back(d[0]);
+    Detection d = mapDetections[i];
+    filtedIndexs.push_back(d.id);
   }
 
   return true;
 }
 
-bool applyNMS4Detections(std::vector<std::vector<std::vector<float> > >& allDetections, std::vector<int>& filtedIndexs, std::vector<int> size, float confidence_threshold, std::vector<cv::Mat> rotaMats, double hFOV)
+bool applyNMS4Detections(std::vector<std::vector<Detection > >& allDetections, std::vector<int>& filtedIndexs, aParams& params, float confidence_threshold, std::vector<cv::Mat> rotaMats)
 {
-  int warpWidth = size[0];
-  int warpHeight = size[1];
-  int panoWidth = size[2];
-  int panoHeight = size[3];
-  double F  = (warpWidth/2)/tan(hFOV/2.f);
-  double du = panoWidth/2/CV_PI;
-  double dv = panoHeight/CV_PI;
-  std::vector<std::vector<float> > mapDetections;
+  std::vector<Detection> mapDetections;
   for(int j = 0; j < allDetections.size(); j++)
   {
-    std::vector<std::vector<float> > detections = allDetections[j];
+    std::vector<Detection > detections = allDetections[j];
     cv::Mat rotaMat = rotaMats[j];
     for(int i = 0; i < detections.size(); ++i)
     {
-      const std::vector<float> detection = detections[i];  
-      const float score = detection[2];
-      std::vector<float> mapDetection;
+      Detection detection = detections[i];
+      const float score = detection.score;
+      Detection mapDetection;
       if (score >= confidence_threshold){
-        for(int k = 0; k < detection.size(); k++)
+        mapDetection.imgId = detection.imgId;
+        mapDetection.score = detection.score;
+        mapDetection.label = detection.label;
+        for(int k = 0; k < 4; k++)
         {
-          if(k < 3)
-          {
-            mapDetection.push_back(detection[k]);
-          } else {
-            double x = static_cast<double>(detection[k++] * warpWidth);
-            double y = static_cast<double>(detection[k] * warpHeight); 
-            std::pair<double, double> coord = map2PanoCoord(x, y, size, F, du, dv, rotaMat);
-            mapDetection.push_back(coord.first);
-            mapDetection.push_back(coord.second);
-          }
+          double x = static_cast<double>(detection.point[k].x);
+          double y = static_cast<double>(detection.point[k].y); 
+          std::pair<double, double> coord = map2PanoCoord(x, y, params, rotaMat);
+          mapDetection.point[k].x = coord.first;
+          mapDetection.point[k].y = coord.second;
         }
-        mapDetections.push_back(mapDetection);
+        
+        mapDetections.push_back(detection);
       }
     }
   }
-  applyNMS(mapDetections, filtedIndexs);
+  applyNMS(mapDetections, filtedIndexs, params, rotaMats);
   sort(filtedIndexs.begin(), filtedIndexs.end());
   mapDetections.clear();
 
